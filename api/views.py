@@ -278,15 +278,15 @@ def dashboard_user_delete(request, user_id):
 @permission_classes([AllowAny])
 def verify_user_code(request):
     data = request.data or {}
-    user_id = data.get("user_id")
+    phone_number = str(data.get("phone_number") or data.get("phonenumber") or "").strip()
     verification_code = str(data.get("verification_code") or "").strip()
 
-    if user_id in (None, "") or verification_code == "":
-        return Response({"valid": False, "error": "user_id and verification_code are required."}, status=400)
+    if phone_number == "" or verification_code == "":
+        return Response({"valid": False, "error": "phone_number and verification_code are required."}, status=400)
 
     try:
-        user = User.objects.get(user_id=int(user_id))
-    except (TypeError, ValueError, User.DoesNotExist):
+        user = User.objects.get(phone_numbers__mobile_number=phone_number)
+    except User.DoesNotExist:
         return Response({"valid": False}, status=200)
 
     is_valid = user.verification_code is not None and user.verification_code.strip() == verification_code
