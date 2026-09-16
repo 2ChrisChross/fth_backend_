@@ -22,12 +22,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-for-local-setup')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS").split(" ") or ["localhost"]
+ALLOWED_HOSTS = (os.environ.get("ALLOWED_HOSTS") or "localhost 127.0.0.1").split(" ")
 
 
 # Application definition
@@ -58,7 +58,7 @@ ROOT_URLCONF = 'fth_backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -83,7 +83,7 @@ DATABASES = {
     }
 }
 
-database_url = os.environ.get('DATABASE_URL')
+database_url = os.environ.get('DATABASE_URL') or 'sqlite:///db.sqlite3'
 DATABASES['default'] = dj_database_url.parse(database_url)
 
 # Password validation

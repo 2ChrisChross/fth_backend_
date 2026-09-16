@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTH Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f4f7fb;
+            color: #222;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 32px auto;
+            padding: 24px;
+        }
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .title {
+            font-size: 2rem;
+            margin: 0;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 8px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background: #1f6feb;
+            color: white;
+        }
+        .btn-secondary {
+            background: #e7edf8;
+            color: #1a2b4d;
+        }
+        .btn-danger {
+            background: #d9534f;
+            color: white;
+        }
+        .search-form {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        .search-form form {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        input, select {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #d7dfe9;
+            font-size: 14px;
+        }
+        input[type="text"] {
+            min-width: 220px;
+            flex: 1;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        th, td {
+            text-align: left;
+            padding: 14px 12px;
+            border-bottom: 1px solid #edf1f7;
+            vertical-align: top;
+        }
+        th {
+            background: #eef4ff;
+            color: #183153;
+        }
+        .badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: #edf7ed;
+            color: #1f7a36;
+        }
+        .muted {
+            color: #667085;
+        }
+        .doc-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+        .doc-list li {
+            margin-bottom: 6px;
+        }
+        .empty {
+            padding: 24px;
+            text-align: center;
+            color: #667085;
+            background: white;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="topbar">
+            <h1 class="title">Registered Users</h1>
+            <div class="actions">
+                <a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add New User</a>
+            </div>
+        </div>
+
+        <div class="search-form">
+            <form method="get">
+                <input type="text" name="q" value="{{ query }}" placeholder="Search by name, farm, barangay, phone...">
+                <select name="sort">
+                    <option value="az" {% if sort == 'az' %}selected{% endif %}>A-Z</option>
+                    <option value="za" {% if sort == 'za' %}selected{% endif %}>Z-A</option>
+                    <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
+                </select>
+                <button class="btn btn-secondary" type="submit">Filter</button>
+                {% if query or sort != 'az' %}
+                    <a class="btn btn-secondary" href="{% url 'dashboard_users' %}">Clear</a>
+                {% endif %}
+            </form>
+        </div>
+
+        {% if rows %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Farm Size</th>
+                        <th>Location</th>
+                        <th>Documents</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            <td>{{ row.full_name }}</td>
+                            <td>{{ row.phone_number }}</td>
+                            <td>{{ row.farm_size }}</td>
+                            <td>{{ row.address }}</td>
+                            <td>
+                                {% if row.documents %}
+                                    <ul class="doc-list">
+                                        {% for doc in row.documents %}
+                                            <li><a href="{{ doc.file_url }}" target="_blank">{{ doc.doc_title }}</a></li>
+                                        {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    <span class="muted">No docs</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a class="btn btn-secondary" href="{% url 'dashboard_user_edit' row.user.user_id %}">Edit</a>
+                                <a class="btn btn-danger" href="{% url 'dashboard_user_delete' row.user.user_id %}">Delete</a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty">No users match your search.</div>
+        {% endif %}
+    </div>
+</body>
+</html>

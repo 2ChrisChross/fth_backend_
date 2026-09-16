@@ -1,6 +1,8 @@
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.hashers import make_password
+from django.db.models import Q
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.crypto import get_random_string
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -11,6 +13,169 @@ from .models import Address, ElectronicDocument, Farm, PhoneNumber, User
 
 def index(request):
     return Response({"message": "FTH API is running."})
+
+
+def dashboard_users(request):
+    query = (request.GET.get("q") or "").strip()
+    sort = request.GET.get("sort", "name")
+
+    users = User.objects.all().order_by("first_name", "last_name", "user_id")
+
+    if query:
+        users = users.filter(
+            Q(first_name__icontains=query)
+            | Q(middle_name__icontains=query)
+            | Q(last_name__icontains=query)
+            | Q(phone_numbers__mobile_number__icontains=query)
+            | Q(farms__address__municipality_city__icontains=query)
+            | Q(farms__address__barangay__icontains=query)
+        ).distinct()
+
+    if sort == "az":
+        users = users.order_by("first_name", "last_name", "user_id")
+    elif sort == "za":
+        users = users.order_by("-first_name", "-last_name", "-user_id")
+    elif sort == "newest":
+        users = users.order_by("-user_id")
+
+    dashboard_rows = []
+    for user in users:
+        phone = user.phone_numbers.first()
+        farm = user.farms.first()
+        address = farm.address if farm and farm.address else None
+        documents = user.electronic_documents.all()[:4]
+
+        dashboard_rows.append(
+            {
+                "user": user,
+                "full_name": " ".join(
+                    part for part in [user.first_name, user.middle_name, user.last_name] if part
+                ),
+                "phone_number": phone.mobile_number if phone else "-",
+                "farm_size": farm.farm_size_hectares if farm else "-",
+                "address": (
+                    ", ".join(
+                        part
+                        for part in [
+                            address.street_address if address else None,
+                            address.barangay if address else None,
+                            address.municipality_city if address else None,
+                            address.province if address else None,
+                        ]
+                        if part
+                    )
+                    or "-"
+                ),
+                "documents": documents,
+            }
+        )
+
+    return render(
+        request,
+        "api/dashboard.html",
+        {
+            "rows": dashboard_rows,
+            "query": query,
+            "sort": sort,
+        },
+    )
+
+
+def dashboard_user_form(request, user_id=None):
+    user = get_object_or_404(User, user_id=user_id) if user_id else None
+    phone = user.phone_numbers.first() if user else None
+    farm = user.farms.first() if user else None
+    address = farm.address if farm else None
+
+    if request.method == "POST":
+        first_name = (request.POST.get("first_name") or "").strip()
+        middle_name = (request.POST.get("middle_name") or "").strip()
+        last_name = (request.POST.get("last_name") or "").strip()
+        phone_number = (request.POST.get("phone_number") or "").strip()
+        farm_size = (request.POST.get("farm_size") or "").strip()
+        street = (request.POST.get("street") or "").strip()
+        barangay = (request.POST.get("barangay") or "").strip()
+        municipality = (request.POST.get("municipality") or "").strip()
+        province = (request.POST.get("province") or "").strip()
+        region = (request.POST.get("region") or "").strip()
+        house_number = (request.POST.get("house_number") or "").strip()
+
+        if not first_name or not last_name:
+            return render(
+                request,
+                "api/user_form.html",
+                {
+                    "user": user,
+                    "error": "First name and last name are required.",
+                },
+            )
+
+        if user is None:
+            user = User.objects.create(
+                first_name=first_name,
+                middle_name=middle_name or None,
+                last_name=last_name,
+                password_hash=make_password("changeme123"),
+                verification_code=get_random_string(8, allowed_chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"),
+            )
+        else:
+            user.first_name = first_name
+            user.middle_name = middle_name or None
+            user.last_name = last_name
+            user.save()
+
+        if phone is None:
+            phone = PhoneNumber.objects.create(user=user, mobile_number=phone_number or "", phone_type="mobile")
+        else:
+            phone.mobile_number = phone_number or phone.mobile_number
+            phone.save()
+
+        if farm is None:
+            address_obj = Address.objects.create(
+                street_address=f"{house_number} {street}" if house_number or street else "",
+                barangay=barangay,
+                municipality_city=municipality,
+                province=province,
+                country="Philippines",
+                gps_coordinates=region or "",
+                address_type="farm",
+            )
+            farm = Farm.objects.create(
+                user=user,
+                address=address_obj,
+                farm_size_hectares=Decimal(str(farm_size)) if farm_size else None,
+            )
+        else:
+            if farm.address:
+                farm.address.street_address = f"{house_number} {street}" if house_number or street else ""
+                farm.address.barangay = barangay
+                farm.address.municipality_city = municipality
+                farm.address.province = province
+                farm.address.gps_coordinates = region or farm.address.gps_coordinates
+                farm.address.save()
+            farm.farm_size_hectares = Decimal(str(farm_size)) if farm_size else farm.farm_size_hectares
+            farm.save()
+
+        return redirect("dashboard_users")
+
+    return render(
+        request,
+        "api/user_form.html",
+        {
+            "user": user,
+            "phone": phone,
+            "farm": farm,
+            "address": address,
+        },
+    )
+
+
+def dashboard_user_delete(request, user_id):
+    user = get_object_or_404(User, user_id=user_id)
+    if request.method == "POST":
+        user.delete()
+        return redirect("dashboard_users")
+    return render(request, "api/user_delete_confirm.html", {"user": user})
 
 
 @api_view(["POST"])
@@ -66,10 +231,7 @@ def register_user(request):
 
     document_urls = data.get("documents")
     if document_urls is None:
-        document_urls = [
-            data.get(f"document_{index}")
-            for index in range(1, 5)
-        ]
+        document_urls = [data.get(f"document_{index}") for index in range(1, 5)]
 
     if isinstance(document_urls, str):
         document_urls = [document_urls]
@@ -78,7 +240,6 @@ def register_user(request):
     if len(document_urls) < 4:
         return Response({"error": "Please upload at least 4 document URLs."}, status=400)
 
-    # Persist the user record.
     user = User.objects.create(
         password_hash=make_password(password),
         first_name=first_name,
@@ -90,13 +251,13 @@ def register_user(request):
         ),
     )
 
-    # Save the user profile address if the schema later includes a direct user-address FK.
     user_address = Address.objects.create(
-        street_address=f"{house_number} {street}" if data.get("house_number") else street,
+        street_address=f"{data.get('house_number', '')} {data.get('street', '')}" if data.get("house_number") else data.get("street") or "",
         barangay=data.get("baranggay") or data.get("barangay"),
         municipality_city=data.get("municipality") or data.get("municipality_city"),
         province=data.get("province"),
         country=data.get("country") or "Philippines",
+        gps_coordinates=farm_region or data.get("region") or "",
         address_type="residence",
     )
 
@@ -118,6 +279,7 @@ def register_user(request):
         municipality_city=farm_municipality,
         province=farm_province,
         country=data.get("farm_country") or "Philippines",
+        gps_coordinates=farm_region or "",
         address_type="farm",
     )
 
