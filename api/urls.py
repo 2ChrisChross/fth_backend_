@@ -5,10 +5,12 @@ from .views import (
     dashboard_user_form,
     dashboard_users,
     register_user,
+    verify_user_code,
 )
 
 urlpatterns = [
     path("register/", register_user, name="register_user"),
+    path("verify-code/", verify_user_code, name="verify_user_code"),
     path("dashboard/", dashboard_users, name="dashboard_users"),
     path("dashboard/create/", dashboard_user_form, name="dashboard_user_create"),
     path("dashboard/edit/<int:user_id>/", dashboard_user_form, name="dashboard_user_edit"),

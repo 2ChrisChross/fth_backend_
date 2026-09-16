@@ -276,6 +276,25 @@ def dashboard_user_delete(request, user_id):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+def verify_user_code(request):
+    data = request.data or {}
+    user_id = data.get("user_id")
+    verification_code = str(data.get("verification_code") or "").strip()
+
+    if user_id in (None, "") or verification_code == "":
+        return Response({"valid": False, "error": "user_id and verification_code are required."}, status=400)
+
+    try:
+        user = User.objects.get(user_id=int(user_id))
+    except (TypeError, ValueError, User.DoesNotExist):
+        return Response({"valid": False}, status=200)
+
+    is_valid = user.verification_code is not None and user.verification_code.strip() == verification_code
+    return Response({"valid": is_valid}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
 def register_user(request):
     data = request.data or {}
 
