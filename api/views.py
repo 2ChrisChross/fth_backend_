@@ -57,7 +57,7 @@ def index(request):
 
 
 def database_ready_for_dashboard():
-    required_tables = {"users", "phone_numbers", "farms", "addresses", "verification_code", "electronic_documents"}
+    required_tables = {"users", "phone_numbers", "farms", "addresses", "electronic_documents"}
     try:
         existing_tables = {name.lower() for name in connection.introspection.table_names()}
         return required_tables.issubset(existing_tables)
@@ -115,6 +115,7 @@ def dashboard_users(request):
                 ),
                 "phone_number": phone.mobile_number if phone else "-",
                 "farm_size": farm.farm_size_hectares if farm else "-",
+                "verification_code": user.verification_code or "-",
                 "address": (
                     ", ".join(
                         part
@@ -153,7 +154,6 @@ def dashboard_user_form(request, user_id=None):
                 "phone": None,
                 "farm": None,
                 "address": None,
-                "verification_code": None,
                 "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the correct database.",
             },
         )

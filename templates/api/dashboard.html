@@ -159,6 +159,7 @@
                         <th>Name</th>
                         <th>Phone</th>
                         <th>Farm Size</th>
+                        <th>Verification Code</th>
                         <th>Location</th>
                         <th>Documents</th>
                         <th>Actions</th>
@@ -170,6 +171,7 @@
                             <td>{{ row.full_name }}</td>
                             <td>{{ row.phone_number }}</td>
                             <td>{{ row.farm_size }}</td>
+                            <td><strong>{{ row.verification_code }}</strong></td>
                             <td>{{ row.address }}</td>
                             <td>
                                 {% if row.documents %}
