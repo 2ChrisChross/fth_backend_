@@ -284,13 +284,15 @@ def verify_user_code(request):
     if phone_number == "" or verification_code == "":
         return Response({"valid": False, "error": "phone_number and verification_code are required."}, status=400)
 
-    try:
-        user = User.objects.get(phone_numbers__mobile_number=phone_number)
-    except User.DoesNotExist:
+    users = User.objects.filter(phone_numbers__mobile_number=phone_number).order_by("-user_id")
+    if not users.exists():
         return Response({"valid": False}, status=200)
 
-    is_valid = user.verification_code is not None and user.verification_code.strip() == verification_code
-    return Response({"valid": is_valid}, status=200)
+    for user in users:
+        if user.verification_code is not None and user.verification_code.strip() == verification_code:
+            return Response({"valid": True}, status=200)
+
+    return Response({"valid": False}, status=200)
 
 
 @api_view(["POST"])
