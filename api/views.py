@@ -146,7 +146,17 @@ def dashboard_user_form(request, user_id=None):
             )
 
         if user is None:
+            anchor_address = Address.objects.create(
+                street_address=f"{house_number} {street}" if house_number or street else "",
+                barangay=barangay,
+                municipality_city=municipality,
+                province=province,
+                country="Philippines",
+                gps_coordinates=region or "",
+                address_type="residence",
+            )
             user = User.objects.create(
+                user_id=anchor_address.address_id,
                 first_name=first_name,
                 middle_name=middle_name or None,
                 last_name=last_name,
@@ -285,17 +295,6 @@ def register_user(request):
     if len(document_urls) < 4:
         return Response({"error": "Please upload at least 4 document URLs."}, status=400)
 
-    user = User.objects.create(
-        password_hash=make_password(password),
-        first_name=first_name,
-        middle_name=middle_name or None,
-        last_name=last_name,
-        verification_code=get_random_string(
-            8,
-            allowed_chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
-        ),
-    )
-
     user_address = Address.objects.create(
         street_address=f"{data.get('house_number', '')} {data.get('street', '')}" if data.get("house_number") else data.get("street") or "",
         barangay=data.get("baranggay") or data.get("barangay"),
@@ -304,6 +303,18 @@ def register_user(request):
         country=data.get("country") or "Philippines",
         gps_coordinates=farm_region or data.get("region") or "",
         address_type="residence",
+    )
+
+    user = User.objects.create(
+        user_id=user_address.address_id,
+        password_hash=make_password(password),
+        first_name=first_name,
+        middle_name=middle_name or None,
+        last_name=last_name,
+        verification_code=get_random_string(
+            8,
+            allowed_chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+        ),
     )
 
     phone = PhoneNumber.objects.create(
