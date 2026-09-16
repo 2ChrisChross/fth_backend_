@@ -25,7 +25,7 @@ class EnumeratedValue(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'enumerated_values'
+        db_table = 'ENUMERATED_VALUES'
         constraints = [
             models.UniqueConstraint(fields=['type', 'value'], name='uq_enumerated_value')
         ]

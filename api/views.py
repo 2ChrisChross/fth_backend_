@@ -17,11 +17,9 @@ def index(request):
 
 
 def database_ready_for_dashboard():
-    required_tables = {"USERS", "PHONE_NUMBERS", "FARMS", "ADDRESSES", "ELECTRONIC_DOCUMENTS"}
+    required_tables = {"users", "phone_numbers", "farms", "addresses", "electronic_documents"}
     try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            existing_tables = {row[0] for row in cursor.fetchall()}
+        existing_tables = {name.lower() for name in connection.introspection.table_names()}
         return required_tables.issubset(existing_tables)
     except Exception:
         return False
@@ -359,3 +357,36 @@ def register_user(request):
         },
         status=201,
     )
+    
+    
+    
+    
+{
+  "phonenumber": "+639171234567",
+  "username": "juan_dela_cruz",
+  "password": "StrongPass123!",
+  "firstname": "Juan",
+  "middle_name": "Santos",
+  "lastname": "Dela Cruz",
+  "region": "Region IV-A",
+  "province": "Batangas",
+  "municipality": "Lipa City",
+  "baranggay": "San Jose",
+  "house_number": "123",
+  "street": "Mabini Street",
+  "postal_code": "4217",
+  "farm_size": "2.5",
+  "farm_region": "Region IV-A",
+  "farm_province": "Batangas",
+  "farm_municipality": "Lipa City",
+  "farm_baranggay": "San Jose",
+  "farm_house_number": "45",
+  "farm_street": "Magsaysay Road",
+  "farm_postal_code": "4217",
+  "documents": [
+    "https://example.com/doc1.jpg",
+    "https://example.com/doc2.jpg",
+    "https://example.com/doc3.jpg",
+    "https://example.com/doc4.jpg"
+  ]
+}
