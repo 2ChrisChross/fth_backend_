@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.hashers import make_password
+from django.db import connection
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.crypto import get_random_string
@@ -15,9 +16,32 @@ def index(request):
     return Response({"message": "FTH API is running."})
 
 
+def database_ready_for_dashboard():
+    required_tables = {"USERS", "PHONE_NUMBERS", "FARMS", "ADDRESSES", "ELECTRONIC_DOCUMENTS"}
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            existing_tables = {row[0] for row in cursor.fetchall()}
+        return required_tables.issubset(existing_tables)
+    except Exception:
+        return False
+
+
 def dashboard_users(request):
     query = (request.GET.get("q") or "").strip()
     sort = request.GET.get("sort", "name")
+
+    if not database_ready_for_dashboard():
+        return render(
+            request,
+            "api/dashboard.html",
+            {
+                "rows": [],
+                "query": query,
+                "sort": sort,
+                "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the project to the correct database.",
+            },
+        )
 
     users = User.objects.all().order_by("first_name", "last_name", "user_id")
 
@@ -82,6 +106,19 @@ def dashboard_users(request):
 
 
 def dashboard_user_form(request, user_id=None):
+    if not database_ready_for_dashboard():
+        return render(
+            request,
+            "api/user_form.html",
+            {
+                "user": None,
+                "phone": None,
+                "farm": None,
+                "address": None,
+                "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the correct database.",
+            },
+        )
+
     user = get_object_or_404(User, user_id=user_id) if user_id else None
     phone = user.phone_numbers.first() if user else None
     farm = user.farms.first() if user else None
@@ -171,6 +208,16 @@ def dashboard_user_form(request, user_id=None):
 
 
 def dashboard_user_delete(request, user_id):
+    if not database_ready_for_dashboard():
+        return render(
+            request,
+            "api/user_delete_confirm.html",
+            {
+                "user": None,
+                "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the correct database.",
+            },
+        )
+
     user = get_object_or_404(User, user_id=user_id)
     if request.method == "POST":
         user.delete()

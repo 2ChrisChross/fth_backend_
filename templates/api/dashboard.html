@@ -132,6 +132,11 @@
             </div>
         </div>
 
+        {% if db_error %}
+            <div class="search-form" style="background: #fff5f5; border: 1px solid #f4c7c7; color: #7a1f1f;">
+                {{ db_error }}
+            </div>
+        {% else %}
         <div class="search-form">
             <form method="get">
                 <input type="text" name="q" value="{{ query }}" placeholder="Search by name, farm, barangay, phone...">
@@ -187,6 +192,7 @@
             </table>
         {% else %}
             <div class="empty">No users match your search.</div>
+        {% endif %}
         {% endif %}
     </div>
 </body>
