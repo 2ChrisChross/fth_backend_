@@ -9,7 +9,47 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import Address, ElectronicDocument, Farm, PhoneNumber, User
+from .models import Address, ElectronicDocument, EnumeratedValue, Farm, PhoneNumber, User
+
+
+def _resolve_enum_order_id(enum_type, raw_value):
+    if raw_value is None:
+        return None
+
+    value = str(raw_value).strip()
+    if value == "":
+        return None
+
+    if value.isdigit():
+        return int(value)
+
+    candidates = ["order_id", "ordering"]
+    with connection.cursor() as cursor:
+        for column in candidates:
+            try:
+                cursor.execute(
+                    (
+                        f'SELECT {column} FROM "enumerated_values" WHERE LOWER(type) = LOWER(%s) '
+                        f'AND LOWER(value) = LOWER(%s) LIMIT 1'
+                    ),
+                    [str(enum_type), value],
+                )
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+            except Exception:
+                continue
+
+    try:
+        enum = EnumeratedValue.objects.filter(type__iexact=str(enum_type), value__iexact=value).first()
+        if enum is not None:
+            if hasattr(enum, "order_id") and enum.order_id is not None:
+                return enum.order_id
+            if hasattr(enum, "ordering") and enum.ordering is not None:
+                return enum.ordering
+        return None
+    except Exception:
+        return None
 
 
 def index(request):
@@ -271,6 +311,14 @@ def register_user(request):
     middle_name = str(data.get("middle_name") or data.get("midle_name") or data.get("middlename") or "").strip()
     last_name = str(data.get("lastname", "")).strip()
 
+    preferred_language = _resolve_enum_order_id("language", data.get("language") or data.get("preferred_language"))
+    role_order_id = _resolve_enum_order_id("role", data.get("role"))
+    onboarding_status_id = _resolve_enum_order_id(
+        "onboarding_status",
+        data.get("onboarding_status") or "Profile_Created",
+    )
+    payment_method_id = _resolve_enum_order_id("payment_method", data.get("payment_method") or data.get("preferred_payment_method"))
+
     farm_region = str(data.get("farm_region") or data.get("region", "")).strip()
     farm_province = str(data.get("farm_province") or data.get("province", "")).strip()
     farm_municipality = str(data.get("farm_municipality") or data.get("municipality", "")).strip()
@@ -295,6 +343,15 @@ def register_user(request):
     if len(document_urls) < 4:
         return Response({"error": "Please upload at least 4 document URLs."}, status=400)
 
+    document_type_names = data.get("document_types")
+    if document_type_names is None and data.get("document_type") is not None:
+        document_type_names = data.get("document_type")
+    if document_type_names is None:
+        document_type_names = ["Utility Bills", "Valid_ID", "Owner_Address", "Farm_Ownership"]
+    if isinstance(document_type_names, str):
+        document_type_names = [document_type_names]
+    document_type_names = [str(item).strip() for item in document_type_names if str(item).strip()]
+
     user_address = Address.objects.create(
         street_address=f"{data.get('house_number', '')} {data.get('street', '')}" if data.get("house_number") else data.get("street") or "",
         barangay=data.get("baranggay") or data.get("barangay"),
@@ -308,6 +365,10 @@ def register_user(request):
     user = User.objects.create(
         user_id=user_address.address_id,
         password_hash=make_password(password),
+        preferred_language=preferred_language,
+        role=role_order_id,
+        onboarding_status=onboarding_status_id,
+        preferred_payment_method=payment_method_id,
         first_name=first_name,
         middle_name=middle_name or None,
         last_name=last_name,
@@ -341,12 +402,16 @@ def register_user(request):
         farm_size_hectares=farm_size,
     )
 
+    document_type_order_ids = []
     for index, url in enumerate(document_urls[:4], start=1):
         file_extension = url.rsplit(".", 1)[-1].lower() if "." in url else ""
+        doc_type_name = document_type_names[index - 1] if index - 1 < len(document_type_names) else "Utility Bills"
+        doc_type_order_id = _resolve_enum_order_id("document_type", doc_type_name) or 1
+        document_type_order_ids.append(doc_type_order_id)
         ElectronicDocument.objects.create(
             user=user,
             doc_title=f"Registration document {index}",
-            doc_type=1,
+            doc_type=doc_type_order_id,
             file_url=url,
             file_extension=file_extension,
             verification_status=0,
@@ -360,6 +425,11 @@ def register_user(request):
             "phone_id": phone.phone_id,
             "farm_id": farm.farm_id,
             "otp": user.verification_code,
+            "language_order_id": preferred_language,
+            "role_order_id": role_order_id,
+            "onboarding_status_order_id": onboarding_status_id,
+            "payment_method_order_id": payment_method_id,
+            "document_type_order_ids": document_type_order_ids,
             "document_count": len(document_urls[:4]),
         },
         status=201,
