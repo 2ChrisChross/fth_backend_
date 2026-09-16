@@ -47,18 +47,6 @@ class User(models.Model):
     total_earnings = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     verification_code = models.CharField(max_length=8, null=True, blank=True)
 
-    # The original schema also defines USERS.user_id -> ADDRESSES.address_id.
-    # Django cannot make one field both a PK and a FK simultaneously, so this relationship
-    # is represented as a standard Address relation on the model side.
-    address = models.ForeignKey(
-        'Address',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='users_by_address',
-        to_field='address_id',
-    )
-
     class Meta:
         managed = False
         db_table = 'USERS'

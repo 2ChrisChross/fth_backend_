@@ -306,10 +306,6 @@ def register_user(request):
         address_type="residence",
     )
 
-    if hasattr(User, "address"):
-        user.address = user_address
-        user.save(update_fields=["address"])
-
     phone = PhoneNumber.objects.create(
         user=user,
         mobile_number=phone_number,
@@ -357,36 +353,3 @@ def register_user(request):
         },
         status=201,
     )
-    
-    
-    
-    
-{
-  "phonenumber": "+639171234567",
-  "username": "juan_dela_cruz",
-  "password": "StrongPass123!",
-  "firstname": "Juan",
-  "middle_name": "Santos",
-  "lastname": "Dela Cruz",
-  "region": "Region IV-A",
-  "province": "Batangas",
-  "municipality": "Lipa City",
-  "baranggay": "San Jose",
-  "house_number": "123",
-  "street": "Mabini Street",
-  "postal_code": "4217",
-  "farm_size": "2.5",
-  "farm_region": "Region IV-A",
-  "farm_province": "Batangas",
-  "farm_municipality": "Lipa City",
-  "farm_baranggay": "San Jose",
-  "farm_house_number": "45",
-  "farm_street": "Magsaysay Road",
-  "farm_postal_code": "4217",
-  "documents": [
-    "https://example.com/doc1.jpg",
-    "https://example.com/doc2.jpg",
-    "https://example.com/doc3.jpg",
-    "https://example.com/doc4.jpg"
-  ]
-}
