@@ -124,78 +124,83 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="topbar">
-            <h1 class="title">Registered Users</h1>
-            <div class="actions">
-                <a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add New User</a>
+    <div>
+        <p>hi</p>
+    </div>
+    <div>
+        <div class="container">
+            <div class="topbar">
+                <h1 class="title">Registered Users</h1>
+                <div class="actions">
+                    <a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add New User</a>
+                </div>
             </div>
-        </div>
 
-        {% if db_error %}
-            <div class="search-form" style="background: #fff5f5; border: 1px solid #f4c7c7; color: #7a1f1f;">
-                {{ db_error }}
+            {% if db_error %}
+                <div class="search-form" style="background: #fff5f5; border: 1px solid #f4c7c7; color: #7a1f1f;">
+                    {{ db_error }}
+                </div>
+            {% else %}
+            <div class="search-form">
+                <form method="get">
+                    <input type="text" name="q" value="{{ query }}" placeholder="Search by name, farm, barangay, phone...">
+                    <select name="sort">
+                        <option value="az" {% if sort == 'az' %}selected{% endif %}>A-Z</option>
+                        <option value="za" {% if sort == 'za' %}selected{% endif %}>Z-A</option>
+                        <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
+                    </select>
+                    <button class="btn btn-secondary" type="submit">Filter</button>
+                    {% if query or sort != 'az' %}
+                        <a class="btn btn-secondary" href="{% url 'dashboard_users' %}">Clear</a>
+                    {% endif %}
+                </form>
             </div>
-        {% else %}
-        <div class="search-form">
-            <form method="get">
-                <input type="text" name="q" value="{{ query }}" placeholder="Search by name, farm, barangay, phone...">
-                <select name="sort">
-                    <option value="az" {% if sort == 'az' %}selected{% endif %}>A-Z</option>
-                    <option value="za" {% if sort == 'za' %}selected{% endif %}>Z-A</option>
-                    <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
-                </select>
-                <button class="btn btn-secondary" type="submit">Filter</button>
-                {% if query or sort != 'az' %}
-                    <a class="btn btn-secondary" href="{% url 'dashboard_users' %}">Clear</a>
-                {% endif %}
-            </form>
-        </div>
 
-        {% if rows %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Phone</th>
-                        <th>Farm Size</th>
-                        <th>Verification Code</th>
-                        <th>Location</th>
-                        <th>Documents</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in rows %}
+            {% if rows %}
+                <table>
+                    <thead>
                         <tr>
-                            <td>{{ row.full_name }}</td>
-                            <td>{{ row.phone_number }}</td>
-                            <td>{{ row.farm_size }}</td>
-                            <td><strong>{{ row.verification_code }}</strong></td>
-                            <td>{{ row.address }}</td>
-                            <td>
-                                {% if row.documents %}
-                                    <ul class="doc-list">
-                                        {% for doc in row.documents %}
-                                            <li><a href="{{ doc.file_url }}" target="_blank">{{ doc.doc_title }}</a></li>
-                                        {% endfor %}
-                                    </ul>
-                                {% else %}
-                                    <span class="muted">No docs</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a class="btn btn-secondary" href="{% url 'dashboard_user_edit' row.user.user_id %}">Edit</a>
-                                <a class="btn btn-danger" href="{% url 'dashboard_user_delete' row.user.user_id %}">Delete</a>
-                            </td>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Farm Size</th>
+                            <th>Verification Code</th>
+                            <th>Location</th>
+                            <th>Documents</th>
+                            <th>Actions</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <div class="empty">No users match your search.</div>
-        {% endif %}
-        {% endif %}
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                            <tr>
+                                <td>{{ row.full_name }}</td>
+                                <td>{{ row.phone_number }}</td>
+                                <td>{{ row.farm_size }}</td>
+                                <td><strong>{{ row.verification_code }}</strong></td>
+                                <td>{{ row.address }}</td>
+                                <td>
+                                    {% if row.documents %}
+                                        <ul class="doc-list">
+                                            {% for doc in row.documents %}
+                                                <li><a href="{{ doc.file_url }}" target="_blank">{{ doc.doc_title }}</a></li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% else %}
+                                        <span class="muted">No docs</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn-secondary" href="{% url 'dashboard_user_edit' row.user.user_id %}">Edit</a>
+                                    <a class="btn btn-danger" href="{% url 'dashboard_user_delete' row.user.user_id %}">Delete</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="empty">No users match your search.</div>
+            {% endif %}
+            {% endif %}
+        </div>
     </div>
 </body>
 </html>
