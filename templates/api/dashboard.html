@@ -268,40 +268,112 @@
 
                 <div class="status-chip-row">
                     {% if section == 'farmers' %}
-                        {% for label, value in [('All','all'), ('Pending','pending'), ('Verified','verified'), ('Rejected','rejected')] %}
-                            <form class="status-chip-form" method="get">
-                                <input type="hidden" name="section" value="{{ section }}">
-                                <input type="hidden" name="q" value="{{ query }}">
-                                <input type="hidden" name="sort_field" value="{{ sort_field }}">
-                                <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-                                <input type="hidden" name="status_filter" value="{{ value }}">
-                                <button type="submit" class="status-chip {% if status_filter == value %}active{% endif %}">{{ label }}</button>
-                            </form>
-                        {% endfor %}
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="all">
+                            <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="pending">
+                            <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="verified">
+                            <button type="submit" class="status-chip {% if status_filter == 'verified' %}active{% endif %}">Verified</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="rejected">
+                            <button type="submit" class="status-chip {% if status_filter == 'rejected' %}active{% endif %}">Rejected</button>
+                        </form>
                     {% elif section == 'logistics' %}
-                        {% for label, value in [('All','all'), ('Pending','pending'), ('Healthy','healthy'), ('Maintenance','maintenance'), ('Disabled','disabled')] %}
-                            <form class="status-chip-form" method="get">
-                                <input type="hidden" name="section" value="{{ section }}">
-                                <input type="hidden" name="q" value="{{ query }}">
-                                <input type="hidden" name="sort_field" value="{{ sort_field }}">
-                                <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-                                <input type="hidden" name="status_filter" value="{{ value }}">
-                                <button type="submit" class="status-chip {% if status_filter == value %}active{% endif %}">{{ label }}</button>
-                            </form>
-                        {% endfor %}
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="all">
+                            <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="pending">
+                            <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="healthy">
+                            <button type="submit" class="status-chip {% if status_filter == 'healthy' %}active{% endif %}">Healthy</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="maintenance">
+                            <button type="submit" class="status-chip {% if status_filter == 'maintenance' %}active{% endif %}">Maintenance</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="disabled">
+                            <button type="submit" class="status-chip {% if status_filter == 'disabled' %}active{% endif %}">Disabled</button>
+                        </form>
                     {% elif section == 'businesses' %}
-                        {% for label, value in [('All','all'), ('Pending','pending'), ('Approved','approved'), ('Rejected','rejected')] %}
-                            <form class="status-chip-form" method="get">
-                                <input type="hidden" name="section" value="{{ section }}">
-                                <input type="hidden" name="q" value="{{ query }}">
-                                <input type="hidden" name="sort_field" value="{{ sort_field }}">
-                                <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-                                <input type="hidden" name="status_filter" value="{{ value }}">
-                                <button type="submit" class="status-chip {% if status_filter == value %}active{% endif %}">{{ label }}</button>
-                            </form>
-                        {% endfor %}
-                    {% endif %}
-                </div>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="all">
+                            <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="pending">
+                            <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="approved">
+                            <button type="submit" class="status-chip {% if status_filter == 'approved' %}active{% endif %}">Approved</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="rejected">
+                            <button type="submit" class="status-chip {% if status_filter == 'rejected' %}active{% endif %}">Rejected</button>
+                        </form>
 
                 {% if rows %}
                     <table>
