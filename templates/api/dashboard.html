@@ -173,7 +173,11 @@
             <div class="brand">FTH</div>
             <nav class="nav-section">
                 {% for item in sections %}
-                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ item.key }}">{{ item.label }}</a>
+                    {% if item.key == 'reports' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_reports' %}">{{ item.label }}</a>
+                    {% else %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ item.key }}">{{ item.label }}</a>
+                    {% endif %}
                 {% endfor %}
             </nav>
         </aside>

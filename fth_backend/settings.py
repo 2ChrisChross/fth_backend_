@@ -76,7 +76,8 @@ WSGI_APPLICATION = 'fth_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-database_url = os.environ.get('DATABASE_URL')
+DEFAULT_DATABASE_URL = "postgresql://root:75uSbzW56VuY66lAWhb4W3ABDZHjXROG@dpg-dah5ghh42hec73esq7eg-a.singapore-postgres.render.com/farmtohome_db"
+database_url = os.environ.get('DATABASE_URL', DEFAULT_DATABASE_URL)
 DATABASES = {'default': dj_database_url.parse(database_url)}
 
 # Password validation

@@ -248,6 +248,52 @@ def _dashboard_stage_rows(section, query, sort):
     return rows
 
 
+def dashboard_reports(request):
+    if not database_ready_for_dashboard():
+        return render(
+            request,
+            "api/reports.html",
+            {
+                "summary": {},
+                "recent_logs": [],
+                "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the correct database.",
+            },
+        )
+
+    farmers_count = User.objects.count()
+    logistics_count = Vehicle.objects.count()
+    businesses_count = Business.objects.count()
+    verified_farmers = User.objects.filter(is_verified__in=[1, True, "1"]).count()
+    pending_farmers = User.objects.filter(is_verified__in=[0, None]).count()
+    approved_businesses = Business.objects.filter(is_verified__in=[1, True, "1"]).count()
+    recent_logs = AuditLog.objects.select_related("user").order_by("-created_at")[:8]
+
+    summary = {
+        "farmers": farmers_count,
+        "logistics": logistics_count,
+        "businesses": businesses_count,
+        "verified_farmers": verified_farmers,
+        "pending_farmers": pending_farmers,
+        "approved_businesses": approved_businesses,
+    }
+
+    return render(
+        request,
+        "api/reports.html",
+        {
+            "summary": summary,
+            "recent_logs": recent_logs,
+            "sections": [
+                {"key": "farmers", "label": "Farmers"},
+                {"key": "logistics", "label": "Logistics"},
+                {"key": "businesses", "label": "Businesses"},
+                {"key": "reports", "label": "Reports"},
+                {"key": "audit_logs", "label": "Audit Logs"},
+            ],
+        },
+    )
+
+
 def dashboard_users(request):
     query = (request.GET.get("q") or "").strip()
     sort = request.GET.get("sort", "name")
@@ -329,6 +375,7 @@ def dashboard_users(request):
         {"key": "farmers", "label": "Farmers"},
         {"key": "logistics", "label": "Logistics"},
         {"key": "businesses", "label": "Businesses"},
+        {"key": "reports", "label": "Reports"},
         {"key": "audit_logs", "label": "Audit Logs"},
     ]
 

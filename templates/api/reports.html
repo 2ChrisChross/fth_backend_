@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTH Dashboard - Reports</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f4f7fb;
+            color: #222;
+        }
+        .dashboard-shell {
+            display: flex;
+            min-height: 100vh;
+        }
+        .sidebar {
+            width: 260px;
+            background: #12233d;
+            color: #fff;
+            padding: 24px 18px;
+            box-sizing: border-box;
+        }
+        .brand {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 26px;
+            letter-spacing: 0.04em;
+        }
+        .nav-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .nav-link {
+            display: block;
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: #dfeafc;
+            background: transparent;
+            font-weight: 600;
+        }
+        .nav-link.active {
+            background: #1d4fbf;
+            color: #fff;
+        }
+        .main {
+            flex: 1;
+            padding: 28px;
+        }
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .title {
+            font-size: 2rem;
+            margin: 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 8px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-secondary {
+            background: #e7edf8;
+            color: #1a2b4d;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .stat-card .label {
+            color: #687385;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .stat-card strong {
+            font-size: 2rem;
+        }
+        .stat-card small {
+            color: #53657a;
+        }
+        .alert {
+            background: #fff5f5;
+            border: 1px solid #f3c4c4;
+            color: #7a1f1f;
+            border-radius: 10px;
+            padding: 15px 18px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        th, td {
+            text-align: left;
+            padding: 14px 12px;
+            border-bottom: 1px solid #edf1f7;
+            vertical-align: top;
+        }
+        th {
+            background: #eef4ff;
+            color: #183153;
+        }
+        .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            padding: 18px;
+        }
+        .panel-header {
+            margin-bottom: 14px;
+        }
+        .panel-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-shell">
+        <aside class="sidebar">
+            <div class="brand">FTH</div>
+            <nav class="nav-section">
+                {% for item in sections %}
+                    {% if item.key == 'reports' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_reports' %}">{{ item.label }}</a>
+                    {% else %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ item.key }}">{{ item.label }}</a>
+                    {% endif %}
+                {% endfor %}
+            </nav>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <h1 class="title">Reports</h1>
+                <a class="btn btn-secondary" href="{% url 'dashboard_users' %}?section=farmers">Back to dashboard</a>
+            </div>
+
+            {% if db_error %}
+                <div class="alert">{{ db_error }}</div>
+            {% else %}
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="label">Farmers</span>
+                        <strong>{{ summary.farmers }}</strong>
+                        <small>{{ summary.verified_farmers }} verified</small>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">Logistics</span>
+                        <strong>{{ summary.logistics }}</strong>
+                        <small>Fleet records</small>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">Businesses</span>
+                        <strong>{{ summary.businesses }}</strong>
+                        <small>{{ summary.approved_businesses }} approved</small>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label">Pending verification</span>
+                        <strong>{{ summary.pending_farmers }}</strong>
+                        <small>Farmers awaiting review</small>
+                    </div>
+                </div>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <h2>Recent audit activity</h2>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Target</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in recent_logs %}
+                                <tr>
+                                    <td>{{ log.created_at|date:"M d, Y H:i" }}</td>
+                                    <td>
+                                        {% if log.user %}
+                                            {{ log.user.first_name }} {{ log.user.last_name }}
+                                        {% else %}
+                                            System
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ log.action_type }}</td>
+                                    <td>{{ log.target_table }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="4">No audit activity yet.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </section>
+            {% endif %}
+        </main>
+    </div>
+</body>
+</html>
