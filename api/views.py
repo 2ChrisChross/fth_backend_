@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.hashers import make_password
 from django.db import connection
-from django.db.models import Q
+from django.db.models import F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.crypto import get_random_string
@@ -104,9 +104,38 @@ def _log_audit_change(user, action_type, target_table, target_id, old_values=Non
         pass
 
 
+def _format_person_name(first_name=None, middle_name=None, last_name=None):
+    first = (first_name or "").strip()
+    middle = (middle_name or "").strip()
+    last = (last_name or "").strip()
+
+    if last and first:
+        return f"{last}, {first}{' ' + middle if middle else ''}"
+    if last:
+        return last
+    if first:
+        return first + (f" {middle}" if middle else "")
+    if middle:
+        return middle
+    return "-"
+
+
 def _dashboard_stage_rows(section, query, sort):
+    sort = sort or "last_name"
+
     if section == "farmers":
-        users = User.objects.all().order_by("first_name", "last_name", "user_id")
+        users = User.objects.all()
+        if sort == "verification":
+            users = users.order_by("-is_verified", "last_name", "first_name", "middle_name", "user_id")
+        elif sort == "farm_size":
+            users = users.order_by(F("farms__farm_size_hectares").desc(nulls_last=True), "last_name", "first_name", "middle_name", "user_id")
+        elif sort == "newest":
+            users = users.order_by("-user_id")
+        elif sort == "za":
+            users = users.order_by("-last_name", "-first_name", "-middle_name", "-user_id")
+        else:
+            users = users.order_by("last_name", "first_name", "middle_name", "user_id")
+
         if query:
             users = users.filter(
                 Q(first_name__icontains=query)
@@ -116,13 +145,6 @@ def _dashboard_stage_rows(section, query, sort):
                 | Q(farms__address__municipality_city__icontains=query)
                 | Q(farms__address__barangay__icontains=query)
             ).distinct()
-
-        if sort == "az":
-            users = users.order_by("first_name", "last_name", "user_id")
-        elif sort == "za":
-            users = users.order_by("-first_name", "-last_name", "-user_id")
-        elif sort == "newest":
-            users = users.order_by("-user_id")
 
         rows = []
         for user in users:
@@ -134,7 +156,7 @@ def _dashboard_stage_rows(section, query, sort):
                 {
                     "id": user.user_id,
                     "entity": user,
-                    "name": " ".join(part for part in [user.first_name, user.middle_name, user.last_name] if part),
+                    "name": _format_person_name(user.first_name, user.middle_name, user.last_name),
                     "phone": phone.mobile_number if phone else "-",
                     "farm_size": farm.farm_size_hectares if farm else "-",
                     "verification_code": user.verification_code or "-",
@@ -164,7 +186,18 @@ def _dashboard_stage_rows(section, query, sort):
         return rows
 
     if section == "logistics":
-        vehicles = Vehicle.objects.select_related("user").order_by("vehicle_id")
+        vehicles = Vehicle.objects.select_related("user")
+        if sort == "status":
+            vehicles = vehicles.order_by("-current_health_status", "user__last_name", "user__first_name", "vehicle_id")
+        elif sort == "capacity":
+            vehicles = vehicles.order_by(F("max_weight_capacity_kg").desc(nulls_last=True), "user__last_name", "user__first_name", "vehicle_id")
+        elif sort == "plate_number":
+            vehicles = vehicles.order_by("plate_number", "user__last_name", "user__first_name", "vehicle_id")
+        elif sort == "za":
+            vehicles = vehicles.order_by("-user__last_name", "-user__first_name", "-vehicle_id")
+        else:
+            vehicles = vehicles.order_by("user__last_name", "user__first_name", "user__middle_name", "vehicle_id")
+
         if query:
             vehicles = vehicles.filter(
                 Q(plate_number__icontains=query)
@@ -174,11 +207,17 @@ def _dashboard_stage_rows(section, query, sort):
             )
         rows = []
         for vehicle in vehicles:
+            owner_name = vehicle.user if vehicle.user else None
+            name = _format_person_name(
+                getattr(owner_name, "first_name", None),
+                getattr(owner_name, "middle_name", None),
+                getattr(owner_name, "last_name", None),
+            ) if owner_name else "Unassigned"
             rows.append(
                 {
                     "id": vehicle.vehicle_id,
                     "entity": vehicle,
-                    "name": vehicle.user.get_full_name() if hasattr(vehicle.user, "get_full_name") else (vehicle.user.first_name if vehicle.user else "Unassigned"),
+                    "name": name,
                     "plate_number": vehicle.plate_number or "-",
                     "model": vehicle.truck_model or "-",
                     "status_value": int(vehicle.current_health_status or 0),
@@ -194,7 +233,16 @@ def _dashboard_stage_rows(section, query, sort):
         return rows
 
     if section == "businesses":
-        businesses = Business.objects.select_related("user").order_by("business_name")
+        businesses = Business.objects.select_related("user")
+        if sort == "status":
+            businesses = businesses.order_by("-is_verified", "business_name", "user__last_name")
+        elif sort == "owner":
+            businesses = businesses.order_by("user__last_name", "user__first_name", "business_name")
+        elif sort == "za":
+            businesses = businesses.order_by("-business_name", "-user__last_name")
+        else:
+            businesses = businesses.order_by("business_name", "user__last_name", "user__first_name")
+
         if query:
             businesses = businesses.filter(
                 Q(business_name__icontains=query)
@@ -204,12 +252,17 @@ def _dashboard_stage_rows(section, query, sort):
             )
         rows = []
         for business in businesses:
+            owner_name = business.user
             rows.append(
                 {
                     "id": business.business_id,
                     "entity": business,
                     "name": business.business_name or "-",
-                    "owner": business.user.first_name + " " + (business.user.last_name or "") if business.user else "-",
+                    "owner": _format_person_name(
+                        getattr(owner_name, "first_name", None),
+                        getattr(owner_name, "middle_name", None),
+                        getattr(owner_name, "last_name", None),
+                    ) if owner_name else "-",
                     "registration_number": business.registration_number or "-",
                     "status_value": 1 if business.is_verified in (1, True, "1") else 0,
                     "status_label": "Approved" if business.is_verified in (1, True, "1") else "Pending",
@@ -222,7 +275,14 @@ def _dashboard_stage_rows(section, query, sort):
             )
         return rows
 
-    audit_logs = AuditLog.objects.select_related("user").order_by("-created_at")[:100]
+    audit_logs = AuditLog.objects.select_related("user")
+    if sort == "action":
+        audit_logs = audit_logs.order_by("action_type", "-created_at")
+    elif sort == "user":
+        audit_logs = audit_logs.order_by("user__last_name", "user__first_name", "-created_at")
+    else:
+        audit_logs = audit_logs.order_by("-created_at")
+
     if query:
         audit_logs = audit_logs.filter(
             Q(action_type__icontains=query)
@@ -236,7 +296,11 @@ def _dashboard_stage_rows(section, query, sort):
             {
                 "id": log.log_id,
                 "entity": log,
-                "name": log.user.first_name + " " + (log.user.last_name or "") if log.user else "System",
+                "name": _format_person_name(
+                    getattr(log.user, "first_name", None),
+                    getattr(log.user, "middle_name", None),
+                    getattr(log.user, "last_name", None),
+                ) if log.user else "System",
                 "action": log.action_type or "-",
                 "target": log.target_table or "-",
                 "status_label": "Recorded",

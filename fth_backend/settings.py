@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import ast
 from pathlib import Path
 import dj_database_url
 import os
@@ -78,6 +79,19 @@ WSGI_APPLICATION = 'fth_backend.wsgi.application'
 
 DEFAULT_DATABASE_URL = "postgresql://root:75uSbzW56VuY66lAWhb4W3ABDZHjXROG@dpg-dah5ghh42hec73esq7eg-a.singapore-postgres.render.com/farmtohome_db"
 database_url = os.environ.get('DATABASE_URL', DEFAULT_DATABASE_URL)
+
+if isinstance(database_url, bytes):
+    database_url = database_url.decode('utf-8')
+
+if database_url and (database_url.startswith("b'") or database_url.startswith('b"')):
+    try:
+        database_url = ast.literal_eval(database_url)
+    except (ValueError, SyntaxError):
+        database_url = DEFAULT_DATABASE_URL
+
+if not database_url:
+    database_url = DEFAULT_DATABASE_URL
+
 DATABASES = {'default': dj_database_url.parse(database_url)}
 
 # Password validation
