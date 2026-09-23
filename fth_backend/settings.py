@@ -27,7 +27,9 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-for-local-setup')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = (os.environ.get("ALLOWED_HOSTS") or "localhost 127.0.0.1").split(" ")
+DEFAULT_DATABASE_URL = "postgresql://root:75uSbzW56VuY66lAWhb4W3ABDZHjXROG@dpg-dah5ghh42hec73esq7eg-a.singapore-postgres.render.com/farmtohome_db"
+DATABASE_URL = os.environ.get('DATABASE_URL', DEFAULT_DATABASE_URL)
+ALLOWED_HOSTS = (os.environ.get("ALLOWED_HOSTS") or "localhost 127.0.0.1 *.onrender.com").split(" ")
 
 
 # Application definition
@@ -76,8 +78,7 @@ WSGI_APPLICATION = 'fth_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-database_url = os.environ.get('DATABASE_URL') or 'sqlite:///db.sqlite3'
-DATABASES = {'default': dj_database_url.parse(database_url)}
+DATABASES = {'default': dj_database_url.parse(DATABASE_URL)}
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators

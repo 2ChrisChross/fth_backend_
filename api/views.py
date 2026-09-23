@@ -9,7 +9,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import Address, ElectronicDocument, EnumeratedValue, Farm, PhoneNumber, User
+from .models import Address, AuditLog, Business, DeliveryTrip, ElectronicDocument, EnumeratedValue, Farm, PhoneNumber, User, Vehicle
 
 
 def _resolve_enum_order_id(enum_type, raw_value):
@@ -57,7 +57,7 @@ def index(request):
 
 
 def database_ready_for_dashboard():
-    required_tables = {"users", "phone_numbers", "farms", "addresses", "electronic_documents"}
+    required_tables = {"users", "phone_numbers", "farms", "addresses", "electronic_documents", "vehicles", "businesses", "audit_logs"}
     try:
         existing_tables = {name.lower() for name in connection.introspection.table_names()}
         return required_tables.issubset(existing_tables)
@@ -65,9 +65,181 @@ def database_ready_for_dashboard():
         return False
 
 
+def _dashboard_stage_rows(section, query, sort):
+    if section == "farmers":
+        users = User.objects.all().order_by("first_name", "last_name", "user_id")
+        if query:
+            users = users.filter(
+                Q(first_name__icontains=query)
+                | Q(middle_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(phone_numbers__mobile_number__icontains=query)
+                | Q(farms__address__municipality_city__icontains=query)
+                | Q(farms__address__barangay__icontains=query)
+            ).distinct()
+
+        if sort == "az":
+            users = users.order_by("first_name", "last_name", "user_id")
+        elif sort == "za":
+            users = users.order_by("-first_name", "-last_name", "-user_id")
+        elif sort == "newest":
+            users = users.order_by("-user_id")
+
+        rows = []
+        for user in users:
+            phone = user.phone_numbers.first()
+            farm = user.farms.first()
+            address = farm.address if farm and farm.address else None
+            documents = user.electronic_documents.all()[:4]
+            rows.append(
+                {
+                    "id": user.user_id,
+                    "entity": user,
+                    "name": " ".join(part for part in [user.first_name, user.middle_name, user.last_name] if part),
+                    "phone": phone.mobile_number if phone else "-",
+                    "farm_size": farm.farm_size_hectares if farm else "-",
+                    "verification_code": user.verification_code or "-",
+                    "location": (
+                        ", ".join(
+                            part
+                            for part in [
+                                address.street_address if address else None,
+                                address.barangay if address else None,
+                                address.municipality_city if address else None,
+                                address.province if address else None,
+                            ]
+                            if part
+                        )
+                        or "-"
+                    ),
+                    "documents": documents,
+                    "status_value": 1 if user.is_verified in (1, True, "1") else 0,
+                    "status_label": "Verified" if user.is_verified in (1, True, "1") else "Pending",
+                    "status_options": [
+                        (0, "Pending"),
+                        (1, "Verified"),
+                        (2, "Rejected"),
+                    ],
+                }
+            )
+        return rows
+
+    if section == "logistics":
+        vehicles = Vehicle.objects.select_related("user").order_by("vehicle_id")
+        if query:
+            vehicles = vehicles.filter(
+                Q(plate_number__icontains=query)
+                | Q(truck_model__icontains=query)
+                | Q(user__first_name__icontains=query)
+                | Q(user__last_name__icontains=query)
+            )
+        rows = []
+        for vehicle in vehicles:
+            rows.append(
+                {
+                    "id": vehicle.vehicle_id,
+                    "entity": vehicle,
+                    "name": vehicle.user.get_full_name() if hasattr(vehicle.user, "get_full_name") else (vehicle.user.first_name if vehicle.user else "Unassigned"),
+                    "plate_number": vehicle.plate_number or "-",
+                    "model": vehicle.truck_model or "-",
+                    "status_value": int(vehicle.current_health_status or 0),
+                    "status_label": {0: "Pending", 1: "Healthy", 2: "Maintenance", 3: "Disabled"}.get(vehicle.current_health_status or 0, "Pending"),
+                    "status_options": [
+                        (0, "Pending"),
+                        (1, "Healthy"),
+                        (2, "Maintenance"),
+                        (3, "Disabled"),
+                    ],
+                }
+            )
+        return rows
+
+    if section == "businesses":
+        businesses = Business.objects.select_related("user").order_by("business_name")
+        if query:
+            businesses = businesses.filter(
+                Q(business_name__icontains=query)
+                | Q(registration_number__icontains=query)
+                | Q(user__first_name__icontains=query)
+                | Q(user__last_name__icontains=query)
+            )
+        rows = []
+        for business in businesses:
+            rows.append(
+                {
+                    "id": business.business_id,
+                    "entity": business,
+                    "name": business.business_name or "-",
+                    "owner": business.user.first_name + " " + (business.user.last_name or "") if business.user else "-",
+                    "registration_number": business.registration_number or "-",
+                    "status_value": 1 if business.is_verified in (1, True, "1") else 0,
+                    "status_label": "Approved" if business.is_verified in (1, True, "1") else "Pending",
+                    "status_options": [
+                        (0, "Pending"),
+                        (1, "Approved"),
+                        (2, "Rejected"),
+                    ],
+                }
+            )
+        return rows
+
+    audit_logs = AuditLog.objects.select_related("user").order_by("-created_at")[:100]
+    if query:
+        audit_logs = audit_logs.filter(
+            Q(action_type__icontains=query)
+            | Q(target_table__icontains=query)
+            | Q(user__first_name__icontains=query)
+            | Q(user__last_name__icontains=query)
+        )
+    rows = []
+    for log in audit_logs:
+        rows.append(
+            {
+                "id": log.log_id,
+                "entity": log,
+                "name": log.user.first_name + " " + (log.user.last_name or "") if log.user else "System",
+                "action": log.action_type or "-",
+                "target": log.target_table or "-",
+                "status_label": "Recorded",
+                "status_value": 1,
+                "status_options": [(1, "Recorded")],
+                "created_at": log.created_at,
+            }
+        )
+    return rows
+
+
 def dashboard_users(request):
     query = (request.GET.get("q") or "").strip()
     sort = request.GET.get("sort", "name")
+    section = (request.POST.get("section") or request.GET.get("section") or "farmers").strip() or "farmers"
+
+    if request.method == "POST":
+        target_id = request.POST.get("target_id")
+        stage = request.POST.get("stage")
+        if target_id and stage is not None:
+            try:
+                stage_value = int(stage)
+            except (TypeError, ValueError):
+                stage_value = None
+
+            if stage_value is not None:
+                if section == "farmers":
+                    user = User.objects.filter(user_id=target_id).first()
+                    if user is not None:
+                        user.is_verified = stage_value
+                        user.save(update_fields=["is_verified"])
+                elif section == "logistics":
+                    vehicle = Vehicle.objects.filter(vehicle_id=target_id).first()
+                    if vehicle is not None:
+                        vehicle.current_health_status = stage_value
+                        vehicle.save(update_fields=["current_health_status"])
+                elif section == "businesses":
+                    business = Business.objects.filter(business_id=target_id).first()
+                    if business is not None:
+                        business.is_verified = stage_value
+                        business.save(update_fields=["is_verified"])
+        return redirect(f"/dashboard/?section={section}&q={query}")
 
     if not database_ready_for_dashboard():
         return render(
@@ -77,61 +249,19 @@ def dashboard_users(request):
                 "rows": [],
                 "query": query,
                 "sort": sort,
-                "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the project to the correct database.",
+                "section": section,
+                "db_error": """The database tables for this app have not been created yet. 
+                Run your migrations or connect the project to the correct database.""",
             },
         )
 
-    users = User.objects.all().order_by("first_name", "last_name", "user_id")
-
-    if query:
-        users = users.filter(
-            Q(first_name__icontains=query)
-            | Q(middle_name__icontains=query)
-            | Q(last_name__icontains=query)
-            | Q(phone_numbers__mobile_number__icontains=query)
-            | Q(farms__address__municipality_city__icontains=query)
-            | Q(farms__address__barangay__icontains=query)
-        ).distinct()
-
-    if sort == "az":
-        users = users.order_by("first_name", "last_name", "user_id")
-    elif sort == "za":
-        users = users.order_by("-first_name", "-last_name", "-user_id")
-    elif sort == "newest":
-        users = users.order_by("-user_id")
-
-    dashboard_rows = []
-    for user in users:
-        phone = user.phone_numbers.first()
-        farm = user.farms.first()
-        address = farm.address if farm and farm.address else None
-        documents = user.electronic_documents.all()[:4]
-
-        dashboard_rows.append(
-            {
-                "user": user,
-                "full_name": " ".join(
-                    part for part in [user.first_name, user.middle_name, user.last_name] if part
-                ),
-                "phone_number": phone.mobile_number if phone else "-",
-                "farm_size": farm.farm_size_hectares if farm else "-",
-                "verification_code": user.verification_code or "-",
-                "address": (
-                    ", ".join(
-                        part
-                        for part in [
-                            address.street_address if address else None,
-                            address.barangay if address else None,
-                            address.municipality_city if address else None,
-                            address.province if address else None,
-                        ]
-                        if part
-                    )
-                    or "-"
-                ),
-                "documents": documents,
-            }
-        )
+    dashboard_rows = _dashboard_stage_rows(section, query, sort)
+    sidebar_sections = [
+        {"key": "farmers", "label": "Farmers"},
+        {"key": "logistics", "label": "Logistics"},
+        {"key": "businesses", "label": "Businesses"},
+        {"key": "audit_logs", "label": "Audit Logs"},
+    ]
 
     return render(
         request,
@@ -140,6 +270,8 @@ def dashboard_users(request):
             "rows": dashboard_rows,
             "query": query,
             "sort": sort,
+            "section": section,
+            "sections": sidebar_sections,
         },
     )
 
@@ -154,7 +286,8 @@ def dashboard_user_form(request, user_id=None):
                 "phone": None,
                 "farm": None,
                 "address": None,
-                "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the correct database.",
+                "db_error": """The database tables for this app have not been created yet. 
+                Run your migrations or connect the correct database.""",
             },
         )
 
@@ -263,7 +396,8 @@ def dashboard_user_delete(request, user_id):
             "api/user_delete_confirm.html",
             {
                 "user": None,
-                "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the correct database.",
+                "db_error": """The database tables for this app have not been created yet. 
+                Run your migrations or connect the correct database.""",
             },
         )
 
@@ -306,6 +440,7 @@ def register_user(request):
         "password",
         "firstname",
         "lastname",
+        
         "region",
         "province",
         "municipality",
@@ -313,7 +448,15 @@ def register_user(request):
         "house_number",
         "street",
         "postal_code",
+        
         "farm_size",
+        "farm_region",
+        "farm_province",
+        "farm_municipality",
+        "farm_barangay",
+        "farm_house_number",
+        "farm_street",
+        "farm_postal_code",
     ]
 
     missing_fields = [

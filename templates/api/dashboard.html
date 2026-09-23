@@ -11,10 +11,45 @@
             background: #f4f7fb;
             color: #222;
         }
-        .container {
-            max-width: 1200px;
-            margin: 32px auto;
-            padding: 24px;
+        .dashboard-shell {
+            display: flex;
+            min-height: 100vh;
+        }
+        .sidebar {
+            width: 260px;
+            background: #12233d;
+            color: #fff;
+            padding: 24px 18px;
+            box-sizing: border-box;
+        }
+        .brand {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 26px;
+            letter-spacing: 0.04em;
+        }
+        .nav-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .nav-link {
+            display: block;
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: #dfeafc;
+            background: transparent;
+            font-weight: 600;
+        }
+        .nav-link.active {
+            background: #1d4fbf;
+            color: #fff;
+        }
+        .main {
+            flex: 1;
+            padding: 28px;
         }
         .topbar {
             display: flex;
@@ -114,6 +149,15 @@
         .doc-list li {
             margin-bottom: 6px;
         }
+        .status-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .status-form select {
+            min-width: 110px;
+        }
         .empty {
             padding: 24px;
             text-align: center;
@@ -124,15 +168,23 @@
     </style>
 </head>
 <body>
-    <div>
-        <p>hi</p>
-    </div>
-    <div>
-        <div class="container">
+    <div class="dashboard-shell">
+        <aside class="sidebar">
+            <div class="brand">FTH</div>
+            <nav class="nav-section">
+                {% for item in sections %}
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ item.key }}">{{ item.label }}</a>
+                {% endfor %}
+            </nav>
+        </aside>
+
+        <main class="main">
             <div class="topbar">
-                <h1 class="title">Registered Users</h1>
+                <h1 class="title">{{ section|title }}</h1>
                 <div class="actions">
-                    <a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add New User</a>
+                    {% if section == 'farmers' %}
+                        <a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add New User</a>
+                    {% endif %}
                 </div>
             </div>
 
@@ -141,66 +193,144 @@
                     {{ db_error }}
                 </div>
             {% else %}
-            <div class="search-form">
-                <form method="get">
-                    <input type="text" name="q" value="{{ query }}" placeholder="Search by name, farm, barangay, phone...">
-                    <select name="sort">
-                        <option value="az" {% if sort == 'az' %}selected{% endif %}>A-Z</option>
-                        <option value="za" {% if sort == 'za' %}selected{% endif %}>Z-A</option>
-                        <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
-                    </select>
-                    <button class="btn btn-secondary" type="submit">Filter</button>
-                    {% if query or sort != 'az' %}
-                        <a class="btn btn-secondary" href="{% url 'dashboard_users' %}">Clear</a>
-                    {% endif %}
-                </form>
-            </div>
+                <div class="search-form">
+                    <form method="get">
+                        <input type="hidden" name="section" value="{{ section }}">
+                        <input type="text" name="q" value="{{ query }}" placeholder="Search records...">
+                        <select name="sort">
+                            {% if section == 'farmers' %}
+                                <option value="az" {% if sort == 'az' %}selected{% endif %}>A-Z</option>
+                                <option value="za" {% if sort == 'za' %}selected{% endif %}>Z-A</option>
+                                <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
+                            {% else %}
+                                <option value="az" {% if sort == 'az' %}selected{% endif %}>A-Z</option>
+                                <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
+                            {% endif %}
+                        </select>
+                        <button class="btn btn-secondary" type="submit">Filter</button>
+                        {% if query or sort != 'az' %}
+                            <a class="btn btn-secondary" href="{% url 'dashboard_users' %}?section={{ section }}">Clear</a>
+                        {% endif %}
+                    </form>
+                </div>
 
-            {% if rows %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Phone</th>
-                            <th>Farm Size</th>
-                            <th>Verification Code</th>
-                            <th>Location</th>
-                            <th>Documents</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in rows %}
+                {% if rows %}
+                    <table>
+                        <thead>
                             <tr>
-                                <td>{{ row.full_name }}</td>
-                                <td>{{ row.phone_number }}</td>
-                                <td>{{ row.farm_size }}</td>
-                                <td><strong>{{ row.verification_code }}</strong></td>
-                                <td>{{ row.address }}</td>
-                                <td>
-                                    {% if row.documents %}
-                                        <ul class="doc-list">
-                                            {% for doc in row.documents %}
-                                                <li><a href="{{ doc.file_url }}" target="_blank">{{ doc.doc_title }}</a></li>
-                                            {% endfor %}
-                                        </ul>
-                                    {% else %}
-                                        <span class="muted">No docs</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <a class="btn btn-secondary" href="{% url 'dashboard_user_edit' row.user.user_id %}">Edit</a>
-                                    <a class="btn btn-danger" href="{% url 'dashboard_user_delete' row.user.user_id %}">Delete</a>
-                                </td>
+                                {% if section == 'farmers' %}
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Farm Size</th>
+                                    <th>Verification Code</th>
+                                    <th>Location</th>
+                                    <th>Documents</th>
+                                    <th>Stage</th>
+                                    <th>Actions</th>
+                                {% elif section == 'logistics' %}
+                                    <th>Driver</th>
+                                    <th>Plate Number</th>
+                                    <th>Vehicle</th>
+                                    <th>Stage</th>
+                                {% elif section == 'businesses' %}
+                                    <th>Business</th>
+                                    <th>Owner</th>
+                                    <th>Registration</th>
+                                    <th>Stage</th>
+                                {% else %}
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>Target</th>
+                                    <th>Time</th>
+                                {% endif %}
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <div class="empty">No users match your search.</div>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                                <tr>
+                                    {% if section == 'farmers' %}
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.phone }}</td>
+                                        <td>{{ row.farm_size }}</td>
+                                        <td><strong>{{ row.verification_code }}</strong></td>
+                                        <td>{{ row.location }}</td>
+                                        <td>
+                                            {% if row.documents %}
+                                                <ul class="doc-list">
+                                                    {% for doc in row.documents %}
+                                                        <li><a href="{{ doc.file_url }}" target="_blank">{{ doc.doc_title }}</a></li>
+                                                    {% endfor %}
+                                                </ul>
+                                            {% else %}
+                                                <span class="muted">No docs</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <form class="status-form" method="post">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="section" value="{{ section }}">
+                                                <input type="hidden" name="target_id" value="{{ row.id }}">
+                                                <select name="stage">
+                                                    {% for value, label in row.status_options %}
+                                                        <option value="{{ value }}" {% if row.status_value == value %}selected{% endif %}>{{ label }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button class="btn btn-secondary" type="submit">Save</button>
+                                            </form>
+                                        </td>
+                                        <td>
+                                            <a class="btn btn-secondary" href="{% url 'dashboard_user_edit' row.entity.user_id %}">Edit</a>
+                                            <a class="btn btn-danger" href="{% url 'dashboard_user_delete' row.entity.user_id %}">Delete</a>
+                                        </td>
+                                    {% elif section == 'logistics' %}
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.plate_number }}</td>
+                                        <td>{{ row.model }}</td>
+                                        <td>
+                                            <form class="status-form" method="post">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="section" value="{{ section }}">
+                                                <input type="hidden" name="target_id" value="{{ row.id }}">
+                                                <select name="stage">
+                                                    {% for value, label in row.status_options %}
+                                                        <option value="{{ value }}" {% if row.status_value == value %}selected{% endif %}>{{ label }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button class="btn btn-secondary" type="submit">Save</button>
+                                            </form>
+                                        </td>
+                                    {% elif section == 'businesses' %}
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.owner }}</td>
+                                        <td>{{ row.registration_number }}</td>
+                                        <td>
+                                            <form class="status-form" method="post">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="section" value="{{ section }}">
+                                                <input type="hidden" name="target_id" value="{{ row.id }}">
+                                                <select name="stage">
+                                                    {% for value, label in row.status_options %}
+                                                        <option value="{{ value }}" {% if row.status_value == value %}selected{% endif %}>{{ label }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button class="btn btn-secondary" type="submit">Save</button>
+                                            </form>
+                                        </td>
+                                    {% else %}
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.action }}</td>
+                                        <td>{{ row.target }}</td>
+                                        <td>{{ row.created_at }}</td>
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="empty">No {{ section }} match your search.</div>
+                {% endif %}
             {% endif %}
-            {% endif %}
-        </div>
+        </main>
     </div>
 </body>
 </html>
