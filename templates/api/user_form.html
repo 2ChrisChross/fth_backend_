@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if user %}Edit User{% else %}Create User{% endif %}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f7fb;
+            margin: 0;
+            padding: 24px;
+        }
+        .card {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        h1 {
+            margin-top: 0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        label {
+            font-weight: 600;
+        }
+        input {
+            padding: 10px 12px;
+            border: 1px solid #d7dfe9;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .actions {
+            margin-top: 24px;
+            display: flex;
+            gap: 12px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 8px;
+            text-decoration: none;
+            border: 1px solid #d7dfe9;
+            background: #eef4ff;
+            color: #183153;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background: #1f6feb;
+            color: white;
+            border-color: #1f6feb;
+        }
+        .error {
+            color: #b42318;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>{% if user %}Edit User{% else %}Create User{% endif %}</h1>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="grid">
+                <div class="field">
+                    <label for="first_name">First Name</label>
+                    <input id="first_name" name="first_name" value="{{ user.first_name|default:'' }}" required>
+                </div>
+                <div class="field">
+                    <label for="middle_name">Middle Name</label>
+                    <input id="middle_name" name="middle_name" value="{{ user.middle_name|default:'' }}">
+                </div>
+                <div class="field">
+                    <label for="last_name">Last Name</label>
+                    <input id="last_name" name="last_name" value="{{ user.last_name|default:'' }}" required>
+                </div>
+                <div class="field">
+                    <label for="phone_number">Phone Number</label>
+                    <input id="phone_number" name="phone_number" value="{{ phone.mobile_number|default:'' }}">
+                </div>
+                <div class="field">
+                    <label for="farm_size">Farm Size (hectares)</label>
+                    <input id="farm_size" name="farm_size" value="{{ farm.farm_size_hectares|default:'' }}">
+                </div>
+                <div class="field">
+                    <label for="house_number">House Number</label>
+                    <input id="house_number" name="house_number" value="{{ address.street_address|default:'' }}">
+                </div>
+                <div class="field">
+                    <label for="street">Street</label>
+                    <input id="street" name="street" value="{{ address.street_address|default:'' }}">
+                </div>
+                <div class="field">
+                    <label for="barangay">Barangay</label>
+                    <input id="barangay" name="barangay" value="{{ address.barangay|default:'' }}">
+                </div>
+                <div class="field">
+                    <label for="municipality">Municipality</label>
+                    <input id="municipality" name="municipality" value="{{ address.municipality_city|default:'' }}">
+                </div>
+                <div class="field">
+                    <label for="province">Province</label>
+                    <input id="province" name="province" value="{{ address.province|default:'' }}">
+                </div>
+                <div class="field">
+                    <label for="region">Region</label>
+                    <input id="region" name="region" value="{{ address.gps_coordinates|default:'' }}">
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" type="submit">Save</button>
+                <a class="btn" href="{% url 'dashboard_users' %}">Cancel</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
