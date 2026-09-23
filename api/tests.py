@@ -35,3 +35,12 @@ class DashboardSidebarTests(SimpleTestCase):
         self.assertContains(response, "Logistics")
         self.assertContains(response, "Businesses")
         self.assertContains(response, "Audit Logs")
+
+    @patch("api.views.database_ready_for_dashboard", return_value=False)
+    def test_dashboard_has_create_links_for_businesses_and_logistics(self, mock_db):
+        request = self.factory.get("/dashboard/", {"section": "businesses"})
+
+        response = dashboard_users(request)
+
+        self.assertContains(response, "Add New Business")
+        self.assertContains(response, "Add New Logistics")

@@ -4,6 +4,7 @@ from django.contrib.auth.hashers import make_password
 from django.db import connection
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.crypto import get_random_string
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -272,6 +273,85 @@ def dashboard_users(request):
             "sort": sort,
             "section": section,
             "sections": sidebar_sections,
+        },
+    )
+
+
+def dashboard_entity_form(request, section="farmers"):
+    if section not in {"businesses", "logistics"}:
+        return redirect("dashboard_users")
+
+    if not database_ready_for_dashboard():
+        return render(
+            request,
+            "api/entity_form.html",
+            {
+                "section": section,
+                "users": [],
+                "db_error": """The database tables for this app have not been created yet. 
+                Run your migrations or connect the correct database.""",
+            },
+        )
+
+    users = User.objects.order_by("first_name", "last_name", "user_id")
+
+    if request.method == "POST":
+        owner_id = request.POST.get("user_id")
+        owner = User.objects.filter(user_id=owner_id).first() if owner_id else None
+
+        if section == "businesses":
+            business_name = (request.POST.get("business_name") or "").strip()
+            registration_number = (request.POST.get("registration_number") or "").strip()
+            business_type = request.POST.get("business_type")
+            is_verified = request.POST.get("is_verified", 0)
+
+            if not owner or not business_name:
+                return render(
+                    request,
+                    "api/entity_form.html",
+                    {"section": section, "users": users, "error": "An owner and business name are required."},
+                )
+
+            Business.objects.create(
+                user=owner,
+                business_name=business_name,
+                business_type=int(business_type) if business_type and str(business_type).isdigit() else None,
+                registration_number=registration_number or None,
+                is_verified=int(is_verified) if str(is_verified).isdigit() else 0,
+                date_time_created=timezone.now(),
+            )
+
+        elif section == "logistics":
+            truck_model = (request.POST.get("truck_model") or "").strip()
+            plate_number = (request.POST.get("plate_number") or "").strip()
+            max_weight = request.POST.get("max_weight_capacity_kg") or ""
+            max_volume = request.POST.get("max_volume_capacity_m3") or ""
+            current_health_status = request.POST.get("current_health_status", 0)
+
+            if not owner or not truck_model or not plate_number:
+                return render(
+                    request,
+                    "api/entity_form.html",
+                    {"section": section, "users": users, "error": "You must assign an owner and provide a vehicle model and plate number."},
+                )
+
+            Vehicle.objects.create(
+                user=owner,
+                truck_model=truck_model,
+                plate_number=plate_number,
+                max_weight_capacity_kg=Decimal(str(max_weight)) if str(max_weight).strip() else None,
+                max_volume_capacity_m3=Decimal(str(max_volume)) if str(max_volume).strip() else None,
+                current_health_status=int(current_health_status) if str(current_health_status).isdigit() else 0,
+            )
+
+        return redirect(f"/dashboard/?section={section}")
+
+    return render(
+        request,
+        "api/entity_form.html",
+        {
+            "section": section,
+            "users": users,
         },
     )
 

@@ -184,6 +184,10 @@
                 <div class="actions">
                     {% if section == 'farmers' %}
                         <a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add New User</a>
+                    {% elif section == 'businesses' %}
+                        <a class="btn btn-primary" href="{% url 'dashboard_entity_create' 'businesses' %}">Add New Business</a>
+                    {% elif section == 'logistics' %}
+                        <a class="btn btn-primary" href="{% url 'dashboard_entity_create' 'logistics' %}">Add New Logistics</a>
                     {% endif %}
                 </div>
             </div>

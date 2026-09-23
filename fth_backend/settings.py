@@ -28,7 +28,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-for-local-setup')
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 DEFAULT_DATABASE_URL = "postgresql://root:75uSbzW56VuY66lAWhb4W3ABDZHjXROG@dpg-dah5ghh42hec73esq7eg-a.singapore-postgres.render.com/farmtohome_db"
-DATABASE_URL = os.environ.get('DATABASE_URL', DEFAULT_DATABASE_URL)
+DATABASE_URL = os.environ.get('DATABASE_URL') or DEFAULT_DATABASE_URL
 ALLOWED_HOSTS = (os.environ.get("ALLOWED_HOSTS") or "localhost 127.0.0.1 *.onrender.com").split(" ")
 
 
