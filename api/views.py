@@ -4,12 +4,155 @@ from django.contrib.auth.hashers import make_password
 from django.db import connection
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.crypto import get_random_string
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import Address, ElectronicDocument, EnumeratedValue, Farm, PhoneNumber, User
+from .models import (
+    Address,
+    AuditLog,
+    Business,
+    ElectronicDocument,
+    EnumeratedValue,
+    Farm,
+    PhoneNumber,
+    User,
+    Vehicle,
+)
+
+
+def _dashboard_full_name(user):
+    return " ".join(part for part in [user.first_name, user.middle_name, user.last_name] if part) or "Unnamed user"
+
+
+def _record_audit(request, action_type, target_table, target_id, old_values=None, new_values=None):
+    if "audit_logs" not in {name.lower() for name in connection.introspection.table_names()}:
+        return
+
+    AuditLog.objects.create(
+        user=None,
+        action_type=action_type,
+        target_table=target_table,
+        target_id=target_id,
+        old_values=old_values,
+        new_values=new_values,
+        ip_address=request.META.get("REMOTE_ADDR"),
+        created_at=timezone.now(),
+    )
+
+
+def _dashboard_context(section, query, sort):
+    context = {
+        "section": section,
+        "query": query,
+        "sort": sort,
+        "rows": [],
+        "business_rows": [],
+        "logistics_rows": [],
+        "audit_rows": [],
+        "authentication_rows": [],
+    }
+
+    if section == "farmers":
+        users = User.objects.all().order_by("first_name", "last_name", "user_id")
+        if query:
+            users = users.filter(
+                Q(first_name__icontains=query)
+                | Q(middle_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(phone_numbers__mobile_number__icontains=query)
+                | Q(farms__address__municipality_city__icontains=query)
+                | Q(farms__address__barangay__icontains=query)
+            ).distinct()
+        if sort == "za":
+            users = users.order_by("-first_name", "-last_name", "-user_id")
+        elif sort == "newest":
+            users = users.order_by("-user_id")
+
+        for user in users:
+            phone = user.phone_numbers.first()
+            farm = user.farms.first()
+            address = farm.address if farm and farm.address else None
+            context["rows"].append({
+                "user": user,
+                "full_name": _dashboard_full_name(user),
+                "phone_number": phone.mobile_number if phone else "-",
+                "farm_size": farm.farm_size_hectares if farm else "-",
+                "verification_code": user.verification_code or "-",
+                "address": ", ".join(
+                    part for part in [
+                        address.street_address if address else None,
+                        address.barangay if address else None,
+                        address.municipality_city if address else None,
+                        address.province if address else None,
+                    ] if part
+                ) or "-",
+                "documents": user.electronic_documents.all()[:4],
+            })
+    elif section == "businesses":
+        businesses = Business.objects.select_related("user").all().order_by("business_name", "business_id")
+        if query:
+            businesses = businesses.filter(
+                Q(business_name__icontains=query)
+                | Q(registration_number__icontains=query)
+                | Q(user__first_name__icontains=query)
+                | Q(user__last_name__icontains=query)
+            )
+        context["business_rows"] = [
+            {
+                "business": business,
+                "owner_name": _dashboard_full_name(business.user) if business.user else "-",
+                "status": "Verified" if business.is_verified else "Pending",
+            }
+            for business in businesses
+        ]
+    elif section == "logistics":
+        vehicles = Vehicle.objects.select_related("user").all().order_by("plate_number", "vehicle_id")
+        if query:
+            vehicles = vehicles.filter(
+                Q(plate_number__icontains=query)
+                | Q(truck_model__icontains=query)
+                | Q(user__first_name__icontains=query)
+                | Q(user__last_name__icontains=query)
+            )
+        context["logistics_rows"] = [
+            {
+                "vehicle": vehicle,
+                "driver_name": _dashboard_full_name(vehicle.user) if vehicle.user else "-",
+                "status": "Active" if not vehicle.deleted_at else "Deleted",
+            }
+            for vehicle in vehicles
+        ]
+    elif section == "logs":
+        logs = AuditLog.objects.select_related("user").all().order_by("-created_at", "-log_id")
+        if query:
+            logs = logs.filter(
+                Q(action_type__icontains=query)
+                | Q(target_table__icontains=query)
+                | Q(ip_address__icontains=query)
+            )
+        context["audit_rows"] = logs[:200]
+    elif section == "authentication":
+        users = User.objects.all().order_by("first_name", "last_name", "user_id")
+        if query:
+            users = users.filter(
+                Q(first_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(phone_numbers__mobile_number__icontains=query)
+            ).distinct()
+        context["authentication_rows"] = [
+            {
+                "user": user,
+                "full_name": _dashboard_full_name(user),
+                "phone": user.phone_numbers.first(),
+                "status": "Verified" if user.is_verified else "Unverified",
+                "password_status": "Password set" if user.password_hash else "No password",
+            }
+            for user in users
+        ]
+    return context
 
 
 def _resolve_enum_order_id(enum_type, raw_value):
@@ -67,81 +210,36 @@ def database_ready_for_dashboard():
 
 def dashboard_users(request):
     query = (request.GET.get("q") or "").strip()
-    sort = request.GET.get("sort", "name")
+    sort = request.GET.get("sort", "az")
+    section = request.GET.get("section", "farmers")
 
-    if not database_ready_for_dashboard():
+    section_tables = {
+        "farmers": {"users", "phone_numbers", "farms", "addresses", "electronic_documents"},
+        "businesses": {"users", "businesses"},
+        "logistics": {"users", "vehicles"},
+        "authentication": {"users", "phone_numbers"},
+        "logs": {"audit_logs"},
+    }
+    existing_tables = {name.lower() for name in connection.introspection.table_names()}
+    missing_tables = sorted(section_tables.get(section, section_tables["farmers"]) - existing_tables)
+    if missing_tables:
         return render(
             request,
             "api/dashboard.html",
             {
+                "section": section,
                 "rows": [],
                 "query": query,
                 "sort": sort,
-                "db_error": "The database tables for this app have not been created yet. Run your migrations or connect the project to the correct database.",
+                "db_error": (
+                    "This dashboard section needs database tables that are not available: "
+                    f"{', '.join(missing_tables)}. Run your migrations or connect the project to the correct database."
+                ),
             },
         )
 
-    users = User.objects.all().order_by("first_name", "last_name", "user_id")
-
-    if query:
-        users = users.filter(
-            Q(first_name__icontains=query)
-            | Q(middle_name__icontains=query)
-            | Q(last_name__icontains=query)
-            | Q(phone_numbers__mobile_number__icontains=query)
-            | Q(farms__address__municipality_city__icontains=query)
-            | Q(farms__address__barangay__icontains=query)
-        ).distinct()
-
-    if sort == "az":
-        users = users.order_by("first_name", "last_name", "user_id")
-    elif sort == "za":
-        users = users.order_by("-first_name", "-last_name", "-user_id")
-    elif sort == "newest":
-        users = users.order_by("-user_id")
-
-    dashboard_rows = []
-    for user in users:
-        phone = user.phone_numbers.first()
-        farm = user.farms.first()
-        address = farm.address if farm and farm.address else None
-        documents = user.electronic_documents.all()[:4]
-
-        dashboard_rows.append(
-            {
-                "user": user,
-                "full_name": " ".join(
-                    part for part in [user.first_name, user.middle_name, user.last_name] if part
-                ),
-                "phone_number": phone.mobile_number if phone else "-",
-                "farm_size": farm.farm_size_hectares if farm else "-",
-                "verification_code": user.verification_code or "-",
-                "address": (
-                    ", ".join(
-                        part
-                        for part in [
-                            address.street_address if address else None,
-                            address.barangay if address else None,
-                            address.municipality_city if address else None,
-                            address.province if address else None,
-                        ]
-                        if part
-                    )
-                    or "-"
-                ),
-                "documents": documents,
-            }
-        )
-
-    return render(
-        request,
-        "api/dashboard.html",
-        {
-            "rows": dashboard_rows,
-            "query": query,
-            "sort": sort,
-        },
-    )
+    context = _dashboard_context(section, query, sort)
+    return render(request, "api/dashboard.html", context)
 
 
 def dashboard_user_form(request, user_id=None):
@@ -204,19 +302,47 @@ def dashboard_user_form(request, user_id=None):
                 password_hash=make_password("changeme123"),
                 verification_code=get_random_string(8, allowed_chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"),
             )
+            _record_audit(
+                request,
+                "CREATE",
+                "USERS",
+                user.user_id,
+                new_values=f"created user {_dashboard_full_name(user)}",
+            )
         else:
+            old_values = f"name={_dashboard_full_name(user)}"
             user.first_name = first_name
             user.middle_name = middle_name or None
             user.last_name = last_name
             user.save()
+            _record_audit(
+                request,
+                "UPDATE",
+                "USERS",
+                user.user_id,
+                old_values=old_values,
+                new_values=f"name={_dashboard_full_name(user)}",
+            )
 
-        if phone is None:
+        phone_was_new = phone is None
+        previous_phone = phone.mobile_number if phone else None
+        if phone_was_new:
             phone = PhoneNumber.objects.create(user=user, mobile_number=phone_number or "", phone_type="mobile")
         else:
             phone.mobile_number = phone_number or phone.mobile_number
             phone.save()
+        _record_audit(
+            request,
+            "CREATE" if phone_was_new else "UPDATE",
+            "PHONE_NUMBERS",
+            phone.phone_id,
+            old_values=f"mobile_number={previous_phone}" if previous_phone else None,
+            new_values=f"mobile_number={phone.mobile_number}",
+        )
 
-        if farm is None:
+        farm_was_new = farm is None
+        previous_farm_size = farm.farm_size_hectares if farm else None
+        if farm_was_new:
             address_obj = Address.objects.create(
                 street_address=f"{house_number} {street}" if house_number or street else "",
                 barangay=barangay,
@@ -241,6 +367,14 @@ def dashboard_user_form(request, user_id=None):
                 farm.address.save()
             farm.farm_size_hectares = Decimal(str(farm_size)) if farm_size else farm.farm_size_hectares
             farm.save()
+        _record_audit(
+            request,
+            "CREATE" if farm_was_new else "UPDATE",
+            "FARMS",
+            farm.farm_id,
+            old_values=f"farm_size_hectares={previous_farm_size}" if previous_farm_size is not None else None,
+            new_values=f"farm_size_hectares={farm.farm_size_hectares}",
+        )
 
         return redirect("dashboard_users")
 
@@ -269,6 +403,13 @@ def dashboard_user_delete(request, user_id):
 
     user = get_object_or_404(User, user_id=user_id)
     if request.method == "POST":
+        _record_audit(
+            request,
+            "DELETE",
+            "USERS",
+            user.user_id,
+            old_values=f"name={_dashboard_full_name(user)}",
+        )
         user.delete()
         return redirect("dashboard_users")
     return render(request, "api/user_delete_confirm.html", {"user": user})

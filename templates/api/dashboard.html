@@ -5,202 +5,81 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FTH Dashboard</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            background: #f4f7fb;
-            color: #222;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 32px auto;
-            padding: 24px;
-        }
-        .topbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        .title {
-            font-size: 2rem;
-            margin: 0;
-        }
-        .actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .btn {
-            display: inline-block;
-            padding: 10px 15px;
-            border-radius: 8px;
-            text-decoration: none;
-            border: none;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .btn-primary {
-            background: #1f6feb;
-            color: white;
-        }
-        .btn-secondary {
-            background: #e7edf8;
-            color: #1a2b4d;
-        }
-        .btn-danger {
-            background: #d9534f;
-            color: white;
-        }
-        .search-form {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            margin-bottom: 20px;
-        }
-        .search-form form {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        input, select {
-            padding: 10px 12px;
-            border-radius: 8px;
-            border: 1px solid #d7dfe9;
-            font-size: 14px;
-        }
-        input[type="text"] {
-            min-width: 220px;
-            flex: 1;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-        th, td {
-            text-align: left;
-            padding: 14px 12px;
-            border-bottom: 1px solid #edf1f7;
-            vertical-align: top;
-        }
-        th {
-            background: #eef4ff;
-            color: #183153;
-        }
-        .badge {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 999px;
-            font-size: 12px;
-            background: #edf7ed;
-            color: #1f7a36;
-        }
-        .muted {
-            color: #667085;
-        }
-        .doc-list {
-            list-style: none;
-            padding-left: 0;
-            margin: 0;
-        }
-        .doc-list li {
-            margin-bottom: 6px;
-        }
-        .empty {
-            padding: 24px;
-            text-align: center;
-            color: #667085;
-            background: white;
-            border-radius: 12px;
-        }
+        :root { --navy: #183153; --blue: #1f6feb; --pale: #eef4ff; --border: #e5eaf1; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; color: #222; background: #f4f7fb; }
+        .shell { display: flex; min-height: 100vh; }
+        .sidebar { width: 245px; flex: 0 0 245px; padding: 28px 16px; color: white; background: var(--navy); }
+        .brand { margin: 0 12px 28px; font-size: 1.25rem; }
+        .nav-label { margin: 24px 12px 8px; color: #aebed5; font-size: .72rem; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; }
+        .nav-link { display: block; padding: 11px 12px; border-radius: 8px; color: #dbe7f8; text-decoration: none; }
+        .nav-link:hover, .nav-link.active { color: white; background: #2a4d7d; }
+        main { min-width: 0; flex: 1; padding: 34px; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
+        h1 { margin: 0; color: var(--navy); font-size: 2rem; }
+        .actions, .filter { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .btn { display: inline-block; padding: 10px 15px; border: 0; border-radius: 8px; cursor: pointer; font-size: 14px; text-decoration: none; }
+        .btn-primary { color: white; background: var(--blue); }
+        .btn-secondary { color: #1a2b4d; background: #e7edf8; }
+        .btn-danger { color: white; background: #d9534f; }
+        .card, table { width: 100%; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .card { padding: 20px; margin-bottom: 20px; }
+        input, select { padding: 10px 12px; border: 1px solid #d7dfe9; border-radius: 8px; font-size: 14px; }
+        input[type="text"] { min-width: 240px; flex: 1; }
+        table { border-collapse: collapse; overflow: hidden; }
+        th, td { padding: 14px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+        th { color: var(--navy); background: var(--pale); }
+        .badge { display: inline-block; padding: 5px 10px; border-radius: 999px; color: #1f7a36; background: #edf7ed; font-size: 12px; }
+        .muted, .empty { color: #667085; }
+        .empty { padding: 24px; text-align: center; }
+        .doc-list { margin: 0; padding-left: 18px; }
+        @media (max-width: 760px) { .shell { display: block; } .sidebar { width: 100%; } main { padding: 20px; overflow-x: auto; } .topbar { align-items: flex-start; flex-direction: column; } }
     </style>
 </head>
 <body>
-    <div>
-        <p>hi</p>
-    </div>
-    <div>
-        <div class="container">
-            <div class="topbar">
-                <h1 class="title">Registered Users</h1>
-                <div class="actions">
-                    <a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add New User</a>
-                </div>
-            </div>
-
-            {% if db_error %}
-                <div class="search-form" style="background: #fff5f5; border: 1px solid #f4c7c7; color: #7a1f1f;">
-                    {{ db_error }}
-                </div>
-            {% else %}
-            <div class="search-form">
-                <form method="get">
-                    <input type="text" name="q" value="{{ query }}" placeholder="Search by name, farm, barangay, phone...">
-                    <select name="sort">
-                        <option value="az" {% if sort == 'az' %}selected{% endif %}>A-Z</option>
-                        <option value="za" {% if sort == 'za' %}selected{% endif %}>Z-A</option>
-                        <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
-                    </select>
+<div class="shell">
+    <aside class="sidebar">
+        <h2 class="brand">FTH Admin</h2>
+        <div class="nav-label">Directory</div>
+        <a class="nav-link {% if section == 'farmers' %}active{% endif %}" href="{% url 'dashboard_users' %}?section=farmers">Farmers</a>
+        <a class="nav-link {% if section == 'logistics' %}active{% endif %}" href="{% url 'dashboard_users' %}?section=logistics">Logistics</a>
+        <a class="nav-link {% if section == 'businesses' %}active{% endif %}" href="{% url 'dashboard_users' %}?section=businesses">Businesses</a>
+        <div class="nav-label">Administration</div>
+        <a class="nav-link {% if section == 'authentication' %}active{% endif %}" href="{% url 'dashboard_users' %}?section=authentication">Authentication</a>
+        <a class="nav-link {% if section == 'logs' %}active{% endif %}" href="{% url 'dashboard_users' %}?section=logs">Database logs</a>
+    </aside>
+    <main>
+        <div class="topbar">
+            <h1>
+                {% if section == 'farmers' %}Farmers{% elif section == 'logistics' %}Logistics{% elif section == 'businesses' %}Businesses{% elif section == 'authentication' %}Authentication{% else %}Database change logs{% endif %}
+            </h1>
+            {% if section == 'farmers' %}<a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add farmer</a>{% endif %}
+        </div>
+        {% if db_error %}
+            <div class="card">{{ db_error }}</div>
+        {% else %}
+            <div class="card">
+                <form class="filter" method="get">
+                    <input type="hidden" name="section" value="{{ section }}">
+                    <input type="text" name="q" value="{{ query }}" placeholder="Search this section...">
+                    {% if section == 'farmers' %}<select name="sort"><option value="az" {% if sort == 'az' %}selected{% endif %}>A-Z</option><option value="za" {% if sort == 'za' %}selected{% endif %}>Z-A</option><option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option></select>{% endif %}
                     <button class="btn btn-secondary" type="submit">Filter</button>
-                    {% if query or sort != 'az' %}
-                        <a class="btn btn-secondary" href="{% url 'dashboard_users' %}">Clear</a>
-                    {% endif %}
+                    {% if query %}<a class="btn btn-secondary" href="{% url 'dashboard_users' %}?section={{ section }}">Clear</a>{% endif %}
                 </form>
             </div>
-
-            {% if rows %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Phone</th>
-                            <th>Farm Size</th>
-                            <th>Verification Code</th>
-                            <th>Location</th>
-                            <th>Documents</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in rows %}
-                            <tr>
-                                <td>{{ row.full_name }}</td>
-                                <td>{{ row.phone_number }}</td>
-                                <td>{{ row.farm_size }}</td>
-                                <td><strong>{{ row.verification_code }}</strong></td>
-                                <td>{{ row.address }}</td>
-                                <td>
-                                    {% if row.documents %}
-                                        <ul class="doc-list">
-                                            {% for doc in row.documents %}
-                                                <li><a href="{{ doc.file_url }}" target="_blank">{{ doc.doc_title }}</a></li>
-                                            {% endfor %}
-                                        </ul>
-                                    {% else %}
-                                        <span class="muted">No docs</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <a class="btn btn-secondary" href="{% url 'dashboard_user_edit' row.user.user_id %}">Edit</a>
-                                    <a class="btn btn-danger" href="{% url 'dashboard_user_delete' row.user.user_id %}">Delete</a>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            {% if section == 'farmers' %}
+                {% if rows %}<table><tr><th>Name</th><th>Phone</th><th>Farm size</th><th>Verification</th><th>Location</th><th>Documents</th><th>Actions</th></tr>{% for row in rows %}<tr><td>{{ row.full_name }}</td><td>{{ row.phone_number }}</td><td>{{ row.farm_size }}</td><td>{{ row.verification_code }}</td><td>{{ row.address }}</td><td>{% if row.documents %}<ul class="doc-list">{% for doc in row.documents %}<li><a href="{{ doc.file_url }}" target="_blank">{{ doc.doc_title }}</a></li>{% endfor %}</ul>{% else %}<span class="muted">No docs</span>{% endif %}</td><td><a class="btn btn-secondary" href="{% url 'dashboard_user_edit' row.user.user_id %}">Edit</a> <a class="btn btn-danger" href="{% url 'dashboard_user_delete' row.user.user_id %}">Delete</a></td></tr>{% endfor %}</table>{% else %}<div class="card empty">No farmers match your search.</div>{% endif %}
+            {% elif section == 'businesses' %}
+                {% if business_rows %}<table><tr><th>Business</th><th>Owner</th><th>Type</th><th>Registration</th><th>Status</th><th>Created</th></tr>{% for row in business_rows %}<tr><td>{{ row.business.business_name|default:"-" }}</td><td>{{ row.owner_name }}</td><td>{{ row.business.business_type|default:"-" }}</td><td>{{ row.business.registration_number|default:"-" }}</td><td><span class="badge">{{ row.status }}</span></td><td>{{ row.business.date_time_created|default:"-" }}</td></tr>{% endfor %}</table>{% else %}<div class="card empty">No businesses match your search.</div>{% endif %}
+            {% elif section == 'logistics' %}
+                {% if logistics_rows %}<table><tr><th>Driver</th><th>Vehicle</th><th>Plate number</th><th>Capacity (kg)</th><th>Status</th></tr>{% for row in logistics_rows %}<tr><td>{{ row.driver_name }}</td><td>{{ row.vehicle.truck_model|default:"-" }}</td><td>{{ row.vehicle.plate_number|default:"-" }}</td><td>{{ row.vehicle.max_weight_capacity_kg|default:"-" }}</td><td><span class="badge">{{ row.status }}</span></td></tr>{% endfor %}</table>{% else %}<div class="card empty">No logistics records match your search.</div>{% endif %}
+            {% elif section == 'authentication' %}
+                {% if authentication_rows %}<table><tr><th>User</th><th>Phone</th><th>Verification</th><th>Password</th><th>User ID</th></tr>{% for row in authentication_rows %}<tr><td>{{ row.full_name }}</td><td>{% if row.phone %}{{ row.phone.mobile_number }}{% else %}-{% endif %}</td><td><span class="badge">{{ row.status }}</span></td><td>{{ row.password_status }}</td><td>{{ row.user.user_id }}</td></tr>{% endfor %}</table>{% else %}<div class="card empty">No authentication records match your search.</div>{% endif %}
             {% else %}
-                <div class="empty">No users match your search.</div>
+                {% if audit_rows %}<table><tr><th>When</th><th>Action</th><th>Table</th><th>Record</th><th>Changes</th><th>IP address</th></tr>{% for log in audit_rows %}<tr><td>{{ log.created_at|default:"-" }}</td><td>{{ log.action_type|default:"-" }}</td><td>{{ log.target_table|default:"-" }}</td><td>{{ log.target_id|default:"-" }}</td><td><div>Before: {{ log.old_values|default:"-" }}</div><div>After: {{ log.new_values|default:"-" }}</div></td><td>{{ log.ip_address|default:"-" }}</td></tr>{% endfor %}</table>{% else %}<div class="card empty">No database changes have been logged.</div>{% endif %}
             {% endif %}
-            {% endif %}
-        </div>
-    </div>
+        {% endif %}
+    </main>
+</div>
 </body>
 </html>
