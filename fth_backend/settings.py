@@ -10,7 +10,6 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
-import ast
 from pathlib import Path
 import dj_database_url
 import os
@@ -85,6 +84,7 @@ if isinstance(database_url, bytes):
 
 if database_url and (database_url.startswith("b'") or database_url.startswith('b"')):
     try:
+        import ast
         database_url = ast.literal_eval(database_url)
     except (ValueError, SyntaxError):
         database_url = DEFAULT_DATABASE_URL

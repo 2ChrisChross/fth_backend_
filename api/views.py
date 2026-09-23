@@ -120,21 +120,27 @@ def _format_person_name(first_name=None, middle_name=None, last_name=None):
     return "-"
 
 
-def _dashboard_stage_rows(section, query, sort):
-    sort = sort or "last_name"
+def _dashboard_stage_rows(section, query, sort_field=None, sort_dir="asc"):
+    sort_field = sort_field or "last_name"
+    sort_dir = "asc" if sort_dir not in {"asc", "desc"} else sort_dir
+    descending = sort_dir == "desc"
+
+    def order_value(*fields):
+        ordered = []
+        for field in fields:
+            ordered.append(f"-{field}" if descending else field)
+        return ordered
 
     if section == "farmers":
         users = User.objects.all()
-        if sort == "verification":
-            users = users.order_by("-is_verified", "last_name", "first_name", "middle_name", "user_id")
-        elif sort == "farm_size":
-            users = users.order_by(F("farms__farm_size_hectares").desc(nulls_last=True), "last_name", "first_name", "middle_name", "user_id")
-        elif sort == "newest":
-            users = users.order_by("-user_id")
-        elif sort == "za":
-            users = users.order_by("-last_name", "-first_name", "-middle_name", "-user_id")
+        if sort_field == "verification":
+            users = users.order_by(*order_value("is_verified", "last_name", "first_name", "middle_name", "user_id"))
+        elif sort_field == "farm_size":
+            users = users.order_by(*order_value("farms__farm_size_hectares", "last_name", "first_name", "middle_name", "user_id"))
+        elif sort_field == "newest":
+            users = users.order_by(*order_value("user_id"))
         else:
-            users = users.order_by("last_name", "first_name", "middle_name", "user_id")
+            users = users.order_by(*order_value("last_name", "first_name", "middle_name", "user_id"))
 
         if query:
             users = users.filter(
@@ -152,6 +158,7 @@ def _dashboard_stage_rows(section, query, sort):
             farm = user.farms.first()
             address = farm.address if farm and farm.address else None
             documents = user.electronic_documents.all()[:4]
+            creation_date = AuditLog.objects.filter(target_table="USERS", target_id=user.user_id, action_type="CREATE").order_by("created_at").values_list("created_at", flat=True).first()
             rows.append(
                 {
                     "id": user.user_id,
@@ -181,22 +188,21 @@ def _dashboard_stage_rows(section, query, sort):
                         (1, "Verified"),
                         (2, "Rejected"),
                     ],
+                    "created_at": creation_date,
                 }
             )
         return rows
 
     if section == "logistics":
         vehicles = Vehicle.objects.select_related("user")
-        if sort == "status":
-            vehicles = vehicles.order_by("-current_health_status", "user__last_name", "user__first_name", "vehicle_id")
-        elif sort == "capacity":
-            vehicles = vehicles.order_by(F("max_weight_capacity_kg").desc(nulls_last=True), "user__last_name", "user__first_name", "vehicle_id")
-        elif sort == "plate_number":
-            vehicles = vehicles.order_by("plate_number", "user__last_name", "user__first_name", "vehicle_id")
-        elif sort == "za":
-            vehicles = vehicles.order_by("-user__last_name", "-user__first_name", "-vehicle_id")
+        if sort_field == "status":
+            vehicles = vehicles.order_by(*order_value("current_health_status", "user__last_name", "user__first_name", "vehicle_id"))
+        elif sort_field == "capacity":
+            vehicles = vehicles.order_by(*order_value("max_weight_capacity_kg", "user__last_name", "user__first_name", "vehicle_id"))
+        elif sort_field == "plate_number":
+            vehicles = vehicles.order_by(*order_value("plate_number", "user__last_name", "user__first_name", "vehicle_id"))
         else:
-            vehicles = vehicles.order_by("user__last_name", "user__first_name", "user__middle_name", "vehicle_id")
+            vehicles = vehicles.order_by(*order_value("user__last_name", "user__first_name", "user__middle_name", "vehicle_id"))
 
         if query:
             vehicles = vehicles.filter(
@@ -213,6 +219,7 @@ def _dashboard_stage_rows(section, query, sort):
                 getattr(owner_name, "middle_name", None),
                 getattr(owner_name, "last_name", None),
             ) if owner_name else "Unassigned"
+            creation_date = AuditLog.objects.filter(target_table="VEHICLES", target_id=vehicle.vehicle_id, action_type="CREATE").order_by("created_at").values_list("created_at", flat=True).first()
             rows.append(
                 {
                     "id": vehicle.vehicle_id,
@@ -228,20 +235,19 @@ def _dashboard_stage_rows(section, query, sort):
                         (2, "Maintenance"),
                         (3, "Disabled"),
                     ],
+                    "created_at": creation_date,
                 }
             )
         return rows
 
     if section == "businesses":
         businesses = Business.objects.select_related("user")
-        if sort == "status":
-            businesses = businesses.order_by("-is_verified", "business_name", "user__last_name")
-        elif sort == "owner":
-            businesses = businesses.order_by("user__last_name", "user__first_name", "business_name")
-        elif sort == "za":
-            businesses = businesses.order_by("-business_name", "-user__last_name")
+        if sort_field == "status":
+            businesses = businesses.order_by(*order_value("is_verified", "business_name", "user__last_name"))
+        elif sort_field == "owner":
+            businesses = businesses.order_by(*order_value("user__last_name", "user__first_name", "business_name"))
         else:
-            businesses = businesses.order_by("business_name", "user__last_name", "user__first_name")
+            businesses = businesses.order_by(*order_value("business_name", "user__last_name", "user__first_name"))
 
         if query:
             businesses = businesses.filter(
@@ -253,6 +259,7 @@ def _dashboard_stage_rows(section, query, sort):
         rows = []
         for business in businesses:
             owner_name = business.user
+            creation_date = business.date_time_created or AuditLog.objects.filter(target_table="BUSINESSES", target_id=business.business_id, action_type="CREATE").order_by("created_at").values_list("created_at", flat=True).first()
             rows.append(
                 {
                     "id": business.business_id,
@@ -271,17 +278,18 @@ def _dashboard_stage_rows(section, query, sort):
                         (1, "Approved"),
                         (2, "Rejected"),
                     ],
+                    "created_at": creation_date,
                 }
             )
         return rows
 
     audit_logs = AuditLog.objects.select_related("user")
-    if sort == "action":
-        audit_logs = audit_logs.order_by("action_type", "-created_at")
-    elif sort == "user":
-        audit_logs = audit_logs.order_by("user__last_name", "user__first_name", "-created_at")
+    if sort_field == "action":
+        audit_logs = audit_logs.order_by(*order_value("action_type", "created_at"))
+    elif sort_field == "user":
+        audit_logs = audit_logs.order_by(*order_value("user__last_name", "user__first_name", "created_at"))
     else:
-        audit_logs = audit_logs.order_by("-created_at")
+        audit_logs = audit_logs.order_by(*order_value("created_at"))
 
     if query:
         audit_logs = audit_logs.filter(
@@ -360,8 +368,106 @@ def dashboard_reports(request):
 
 def dashboard_users(request):
     query = (request.GET.get("q") or "").strip()
-    sort = request.GET.get("sort", "name")
+    sort_field = request.GET.get("sort_field", "last_name")
+    sort_dir = request.GET.get("sort_dir", "asc")
     section = (request.POST.get("section") or request.GET.get("section") or "farmers").strip() or "farmers"
+    legacy_sort = request.GET.get("sort")
+    if legacy_sort and not sort_field:
+        sort_field = legacy_sort
+
+    if request.method == "POST":
+        target_id = request.POST.get("target_id")
+        stage = request.POST.get("stage")
+        if target_id and stage is not None:
+            try:
+                stage_value = int(stage)
+            except (TypeError, ValueError):
+                stage_value = None
+
+            if stage_value is not None:
+                if section == "farmers":
+                    user = User.objects.filter(user_id=target_id).first()
+                    if user is not None:
+                        previous = _serialize_model(user)
+                        user.is_verified = stage_value
+                        user.save(update_fields=["is_verified"])
+                        _log_audit_change(
+                            user=user,
+                            action_type="UPDATE_STATUS",
+                            target_table="USERS",
+                            target_id=user.user_id,
+                            old_values={"is_verified": previous.get("is_verified")},
+                            new_values={"is_verified": user.is_verified},
+                            request=request,
+                        )
+                elif section == "logistics":
+                    vehicle = Vehicle.objects.filter(vehicle_id=target_id).first()
+                    if vehicle is not None:
+                        previous = _serialize_model(vehicle)
+                        vehicle.current_health_status = stage_value
+                        vehicle.save(update_fields=["current_health_status"])
+                        _log_audit_change(
+                            user=vehicle.user,
+                            action_type="UPDATE_STATUS",
+                            target_table="VEHICLES",
+                            target_id=vehicle.vehicle_id,
+                            old_values={"current_health_status": previous.get("current_health_status")},
+                            new_values={"current_health_status": vehicle.current_health_status},
+                            request=request,
+                        )
+                elif section == "businesses":
+                    business = Business.objects.filter(business_id=target_id).first()
+                    if business is not None:
+                        previous = _serialize_model(business)
+                        business.is_verified = stage_value
+                        business.save(update_fields=["is_verified"])
+                        _log_audit_change(
+                            user=business.user,
+                            action_type="UPDATE_STATUS",
+                            target_table="BUSINESSES",
+                            target_id=business.business_id,
+                            old_values={"is_verified": previous.get("is_verified")},
+                            new_values={"is_verified": business.is_verified},
+                            request=request,
+                        )
+        return redirect(f"/dashboard/?section={section}&q={query}&sort_field={sort_field}&sort_dir={sort_dir}")
+
+    if not database_ready_for_dashboard():
+        return render(
+            request,
+            "api/dashboard.html",
+            {
+                "rows": [],
+                "query": query,
+                "sort_field": sort_field,
+                "sort_dir": sort_dir,
+                "section": section,
+                "db_error": """The database tables for this app have not been created yet. 
+                Run your migrations or connect the project to the correct database.""",
+            },
+        )
+
+    dashboard_rows = _dashboard_stage_rows(section, query, sort_field, sort_dir)
+    sidebar_sections = [
+        {"key": "farmers", "label": "Farmers"},
+        {"key": "logistics", "label": "Logistics"},
+        {"key": "businesses", "label": "Businesses"},
+        {"key": "reports", "label": "Reports"},
+        {"key": "audit_logs", "label": "Audit Logs"},
+    ]
+
+    return render(
+        request,
+        "api/dashboard.html",
+        {
+            "rows": dashboard_rows,
+            "query": query,
+            "sort_field": sort_field,
+            "sort_dir": sort_dir,
+            "section": section,
+            "sections": sidebar_sections,
+        },
+    )
 
     if request.method == "POST":
         target_id = request.POST.get("target_id")

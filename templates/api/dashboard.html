@@ -205,29 +205,36 @@
                     <form method="get">
                         <input type="hidden" name="section" value="{{ section }}">
                         <input type="text" name="q" value="{{ query }}" placeholder="Search records...">
-                        <select name="sort">
+
+                        <select name="sort_field">
                             {% if section == 'farmers' %}
-                                <option value="last_name" {% if sort == 'last_name' or sort == 'az' %}selected{% endif %}>Last name</option>
-                                <option value="verification" {% if sort == 'verification' %}selected{% endif %}>Verification stage</option>
-                                <option value="farm_size" {% if sort == 'farm_size' %}selected{% endif %}>Farm size</option>
-                                <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
+                                <option value="last_name" {% if sort_field == 'last_name' %}selected{% endif %}>Last name</option>
+                                <option value="verification" {% if sort_field == 'verification' %}selected{% endif %}>Verification stage</option>
+                                <option value="farm_size" {% if sort_field == 'farm_size' %}selected{% endif %}>Farm size</option>
+                                <option value="newest" {% if sort_field == 'newest' %}selected{% endif %}>Newest</option>
                             {% elif section == 'logistics' %}
-                                <option value="last_name" {% if sort == 'last_name' %}selected{% endif %}>Owner name</option>
-                                <option value="status" {% if sort == 'status' %}selected{% endif %}>Health stage</option>
-                                <option value="capacity" {% if sort == 'capacity' %}selected{% endif %}>Capacity</option>
-                                <option value="plate_number" {% if sort == 'plate_number' %}selected{% endif %}>Plate number</option>
+                                <option value="last_name" {% if sort_field == 'last_name' %}selected{% endif %}>Owner name</option>
+                                <option value="status" {% if sort_field == 'status' %}selected{% endif %}>Health stage</option>
+                                <option value="capacity" {% if sort_field == 'capacity' %}selected{% endif %}>Capacity</option>
+                                <option value="plate_number" {% if sort_field == 'plate_number' %}selected{% endif %}>Plate number</option>
                             {% elif section == 'businesses' %}
-                                <option value="business_name" {% if sort == 'business_name' %}selected{% endif %}>Business name</option>
-                                <option value="status" {% if sort == 'status' %}selected{% endif %}>Verification stage</option>
-                                <option value="owner" {% if sort == 'owner' %}selected{% endif %}>Owner name</option>
+                                <option value="business_name" {% if sort_field == 'business_name' %}selected{% endif %}>Business name</option>
+                                <option value="status" {% if sort_field == 'status' %}selected{% endif %}>Verification stage</option>
+                                <option value="owner" {% if sort_field == 'owner' %}selected{% endif %}>Owner name</option>
                             {% else %}
-                                <option value="newest" {% if sort == 'newest' or sort == 'created_at' %}selected{% endif %}>Newest</option>
-                                <option value="action" {% if sort == 'action' %}selected{% endif %}>Action type</option>
-                                <option value="user" {% if sort == 'user' %}selected{% endif %}>User name</option>
+                                <option value="newest" {% if sort_field == 'newest' or sort_field == 'created_at' %}selected{% endif %}>Newest</option>
+                                <option value="action" {% if sort_field == 'action' %}selected{% endif %}>Action type</option>
+                                <option value="user" {% if sort_field == 'user' %}selected{% endif %}>User name</option>
                             {% endif %}
                         </select>
+
+                        <select name="sort_dir">
+                            <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
+                            <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
+                        </select>
+
                         <button class="btn btn-secondary" type="submit">Filter</button>
-                        {% if query or sort != 'last_name' and sort != 'business_name' and sort != 'newest' and sort != 'verification' and sort != 'status' and sort != 'farm_size' and sort != 'capacity' and sort != 'action' and sort != 'user' and sort != 'owner' and sort != 'plate_number' %}
+                        {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'farm_size' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' %}
                             <a class="btn btn-secondary" href="{% url 'dashboard_users' %}?section={{ section }}">Clear</a>
                         {% endif %}
                     </form>
@@ -244,17 +251,20 @@
                                     <th>Verification Code</th>
                                     <th>Location</th>
                                     <th>Documents</th>
+                                    <th>Created</th>
                                     <th>Stage</th>
                                     <th>Actions</th>
                                 {% elif section == 'logistics' %}
                                     <th>Driver</th>
                                     <th>Plate Number</th>
                                     <th>Vehicle</th>
+                                    <th>Created</th>
                                     <th>Stage</th>
                                 {% elif section == 'businesses' %}
                                     <th>Business</th>
                                     <th>Owner</th>
                                     <th>Registration</th>
+                                    <th>Created</th>
                                     <th>Stage</th>
                                 {% else %}
                                     <th>User</th>
@@ -285,6 +295,13 @@
                                             {% endif %}
                                         </td>
                                         <td>
+                                            {% if row.created_at %}
+                                                {{ row.created_at|date:"M d, Y" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
                                             <form class="status-form" method="post">
                                                 {% csrf_token %}
                                                 <input type="hidden" name="section" value="{{ section }}">
@@ -306,6 +323,13 @@
                                         <td>{{ row.plate_number }}</td>
                                         <td>{{ row.model }}</td>
                                         <td>
+                                            {% if row.created_at %}
+                                                {{ row.created_at|date:"M d, Y" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
                                             <form class="status-form" method="post">
                                                 {% csrf_token %}
                                                 <input type="hidden" name="section" value="{{ section }}">
@@ -322,6 +346,13 @@
                                         <td>{{ row.name }}</td>
                                         <td>{{ row.owner }}</td>
                                         <td>{{ row.registration_number }}</td>
+                                        <td>
+                                            {% if row.created_at %}
+                                                {{ row.created_at|date:"M d, Y" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
                                         <td>
                                             <form class="status-form" method="post">
                                                 {% csrf_token %}
