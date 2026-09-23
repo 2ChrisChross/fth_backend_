@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete User</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f7fb;
+            margin: 0;
+            padding: 32px;
+        }
+        .card {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 8px;
+            text-decoration: none;
+            border: 1px solid #d7dfe9;
+            background: #eef4ff;
+            color: #183153;
+            cursor: pointer;
+        }
+        .btn-danger {
+            background: #d9534f;
+            color: white;
+            border-color: #d9534f;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Delete User</h2>
+        <p>Are you sure you want to delete <strong>{{ user.first_name }} {{ user.last_name }}</strong>?</p>
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="actions">
+                <button class="btn btn-danger" type="submit">Delete</button>
+                <a class="btn" href="{% url 'dashboard_users' %}">Cancel</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
