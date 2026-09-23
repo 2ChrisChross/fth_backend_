@@ -374,6 +374,8 @@
                             <input type="hidden" name="status_filter" value="rejected">
                             <button type="submit" class="status-chip {% if status_filter == 'rejected' %}active{% endif %}">Rejected</button>
                         </form>
+                    {% endif %}
+                </div>
 
                 {% if rows %}
                     <table>
