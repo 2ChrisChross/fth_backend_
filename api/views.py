@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.hashers import make_password
@@ -64,6 +65,43 @@ def database_ready_for_dashboard():
         return required_tables.issubset(existing_tables)
     except Exception:
         return False
+
+
+def _serialize_model(instance):
+    if instance is None:
+        return {}
+    payload = {}
+    for field in instance._meta.fields:
+        value = getattr(instance, field.name)
+        if hasattr(value, "isoformat"):
+            payload[field.name] = value.isoformat()
+        else:
+            payload[field.name] = value
+    return payload
+
+
+def _log_audit_change(user, action_type, target_table, target_id, old_values=None, new_values=None, request=None):
+    try:
+        ip_address = ""
+        if request is not None:
+            forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+            if forwarded_for:
+                ip_address = forwarded_for.split(",")[0].strip()
+            else:
+                ip_address = request.META.get("REMOTE_ADDR", "")
+
+        AuditLog.objects.create(
+            user=user,
+            action_type=action_type,
+            target_table=target_table,
+            target_id=target_id,
+            old_values=json.dumps(old_values, default=str) if old_values is not None else None,
+            new_values=json.dumps(new_values, default=str) if new_values is not None else None,
+            ip_address=ip_address,
+            created_at=timezone.now(),
+        )
+    except Exception:
+        pass
 
 
 def _dashboard_stage_rows(section, query, sort):
@@ -228,18 +266,48 @@ def dashboard_users(request):
                 if section == "farmers":
                     user = User.objects.filter(user_id=target_id).first()
                     if user is not None:
+                        previous = _serialize_model(user)
                         user.is_verified = stage_value
                         user.save(update_fields=["is_verified"])
+                        _log_audit_change(
+                            user=user,
+                            action_type="UPDATE_STATUS",
+                            target_table="USERS",
+                            target_id=user.user_id,
+                            old_values={"is_verified": previous.get("is_verified")},
+                            new_values={"is_verified": user.is_verified},
+                            request=request,
+                        )
                 elif section == "logistics":
                     vehicle = Vehicle.objects.filter(vehicle_id=target_id).first()
                     if vehicle is not None:
+                        previous = _serialize_model(vehicle)
                         vehicle.current_health_status = stage_value
                         vehicle.save(update_fields=["current_health_status"])
+                        _log_audit_change(
+                            user=vehicle.user,
+                            action_type="UPDATE_STATUS",
+                            target_table="VEHICLES",
+                            target_id=vehicle.vehicle_id,
+                            old_values={"current_health_status": previous.get("current_health_status")},
+                            new_values={"current_health_status": vehicle.current_health_status},
+                            request=request,
+                        )
                 elif section == "businesses":
                     business = Business.objects.filter(business_id=target_id).first()
                     if business is not None:
+                        previous = _serialize_model(business)
                         business.is_verified = stage_value
                         business.save(update_fields=["is_verified"])
+                        _log_audit_change(
+                            user=business.user,
+                            action_type="UPDATE_STATUS",
+                            target_table="BUSINESSES",
+                            target_id=business.business_id,
+                            old_values={"is_verified": previous.get("is_verified")},
+                            new_values={"is_verified": business.is_verified},
+                            request=request,
+                        )
         return redirect(f"/dashboard/?section={section}&q={query}")
 
     if not database_ready_for_dashboard():
@@ -312,13 +380,22 @@ def dashboard_entity_form(request, section="farmers"):
                     {"section": section, "users": users, "error": "An owner and business name are required."},
                 )
 
-            Business.objects.create(
+            business = Business.objects.create(
                 user=owner,
                 business_name=business_name,
                 business_type=int(business_type) if business_type and str(business_type).isdigit() else None,
                 registration_number=registration_number or None,
                 is_verified=int(is_verified) if str(is_verified).isdigit() else 0,
                 date_time_created=timezone.now(),
+            )
+            _log_audit_change(
+                user=owner,
+                action_type="CREATE",
+                target_table="BUSINESSES",
+                target_id=business.business_id,
+                old_values={},
+                new_values=_serialize_model(business),
+                request=request,
             )
 
         elif section == "logistics":
@@ -335,13 +412,22 @@ def dashboard_entity_form(request, section="farmers"):
                     {"section": section, "users": users, "error": "You must assign an owner and provide a vehicle model and plate number."},
                 )
 
-            Vehicle.objects.create(
+            vehicle = Vehicle.objects.create(
                 user=owner,
                 truck_model=truck_model,
                 plate_number=plate_number,
                 max_weight_capacity_kg=Decimal(str(max_weight)) if str(max_weight).strip() else None,
                 max_volume_capacity_m3=Decimal(str(max_volume)) if str(max_volume).strip() else None,
                 current_health_status=int(current_health_status) if str(current_health_status).isdigit() else 0,
+            )
+            _log_audit_change(
+                user=owner,
+                action_type="CREATE",
+                target_table="VEHICLES",
+                target_id=vehicle.vehicle_id,
+                old_values={},
+                new_values=_serialize_model(vehicle),
+                request=request,
             )
 
         return redirect(f"/dashboard/?section={section}")
@@ -417,11 +503,30 @@ def dashboard_user_form(request, user_id=None):
                 password_hash=make_password("changeme123"),
                 verification_code=get_random_string(8, allowed_chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"),
             )
+            _log_audit_change(
+                user=user,
+                action_type="CREATE",
+                target_table="USERS",
+                target_id=user.user_id,
+                old_values={},
+                new_values=_serialize_model(user),
+                request=request,
+            )
         else:
+            previous = _serialize_model(user)
             user.first_name = first_name
             user.middle_name = middle_name or None
             user.last_name = last_name
             user.save()
+            _log_audit_change(
+                user=user,
+                action_type="UPDATE",
+                target_table="USERS",
+                target_id=user.user_id,
+                old_values={"first_name": previous.get("first_name"), "middle_name": previous.get("middle_name"), "last_name": previous.get("last_name")},
+                new_values={"first_name": user.first_name, "middle_name": user.middle_name, "last_name": user.last_name},
+                request=request,
+            )
 
         if phone is None:
             phone = PhoneNumber.objects.create(user=user, mobile_number=phone_number or "", phone_type="mobile")
@@ -483,7 +588,17 @@ def dashboard_user_delete(request, user_id):
 
     user = get_object_or_404(User, user_id=user_id)
     if request.method == "POST":
+        previous = _serialize_model(user)
         user.delete()
+        _log_audit_change(
+            user=user,
+            action_type="DELETE",
+            target_table="USERS",
+            target_id=user_id,
+            old_values=previous,
+            new_values={},
+            request=request,
+        )
         return redirect("dashboard_users")
     return render(request, "api/user_delete_confirm.html", {"user": user})
 
