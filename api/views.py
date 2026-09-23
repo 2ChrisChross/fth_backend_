@@ -359,9 +359,20 @@ def dashboard_reports(request):
     farmers_count = User.objects.count()
     logistics_count = Vehicle.objects.count()
     businesses_count = Business.objects.count()
+
     verified_farmers = User.objects.filter(is_verified__in=[1, True, "1"]).count()
     pending_farmers = User.objects.filter(is_verified__in=[0, None]).count()
+    rejected_farmers = User.objects.filter(is_verified=2).count()
+
     approved_businesses = Business.objects.filter(is_verified__in=[1, True, "1"]).count()
+    pending_businesses = Business.objects.filter(is_verified__in=[0, None]).count()
+    rejected_businesses = Business.objects.filter(is_verified=2).count()
+
+    healthy_logistics = Vehicle.objects.filter(current_health_status=1).count()
+    pending_logistics = Vehicle.objects.filter(current_health_status__in=[0, None]).count()
+    maintenance_logistics = Vehicle.objects.filter(current_health_status=2).count()
+    disabled_logistics = Vehicle.objects.filter(current_health_status=3).count()
+
     recent_logs = AuditLog.objects.select_related("user").order_by("-created_at")[:8]
 
     summary = {
@@ -370,7 +381,14 @@ def dashboard_reports(request):
         "businesses": businesses_count,
         "verified_farmers": verified_farmers,
         "pending_farmers": pending_farmers,
+        "rejected_farmers": rejected_farmers,
         "approved_businesses": approved_businesses,
+        "pending_businesses": pending_businesses,
+        "rejected_businesses": rejected_businesses,
+        "healthy_logistics": healthy_logistics,
+        "pending_logistics": pending_logistics,
+        "maintenance_logistics": maintenance_logistics,
+        "disabled_logistics": disabled_logistics,
     }
 
     return render(

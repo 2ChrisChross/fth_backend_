@@ -170,22 +170,22 @@
                     <div class="stat-card">
                         <span class="label">Farmers</span>
                         <strong>{{ summary.farmers }}</strong>
-                        <small>{{ summary.verified_farmers }} verified</small>
+                        <small>{{ summary.verified_farmers }} verified · {{ summary.pending_farmers }} pending · {{ summary.rejected_farmers }} rejected</small>
                     </div>
                     <div class="stat-card">
                         <span class="label">Logistics</span>
                         <strong>{{ summary.logistics }}</strong>
-                        <small>Fleet records</small>
+                        <small>{{ summary.healthy_logistics }} healthy · {{ summary.pending_logistics }} pending · {{ summary.maintenance_logistics }} maintenance · {{ summary.disabled_logistics }} disabled</small>
                     </div>
                     <div class="stat-card">
                         <span class="label">Businesses</span>
                         <strong>{{ summary.businesses }}</strong>
-                        <small>{{ summary.approved_businesses }} approved</small>
+                        <small>{{ summary.approved_businesses }} approved · {{ summary.pending_businesses }} pending · {{ summary.rejected_businesses }} rejected</small>
                     </div>
                     <div class="stat-card">
                         <span class="label">Pending verification</span>
-                        <strong>{{ summary.pending_farmers }}</strong>
-                        <small>Farmers awaiting review</small>
+                        <strong>{{ summary.pending_farmers|add:summary.pending_businesses|add:summary.pending_logistics }}</strong>
+                        <small>Combined pending records</small>
                     </div>
                 </div>
 
