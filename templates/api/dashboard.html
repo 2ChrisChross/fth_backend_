@@ -158,6 +158,28 @@
         .status-form select {
             min-width: 110px;
         }
+        .status-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 14px 0 18px;
+        }
+        .status-chip {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 999px;
+            text-decoration: none;
+            background: #edf3ff;
+            color: #1d4fbf;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid #dfe9ff;
+        }
+        .status-chip.active {
+            background: #1d4fbf;
+            color: white;
+            border-color: #1d4fbf;
+        }
         .empty {
             padding: 24px;
             text-align: center;
@@ -234,10 +256,30 @@
                         </select>
 
                         <button class="btn btn-secondary" type="submit">Filter</button>
-                        {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'farm_size' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' %}
+                        {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'farm_size' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' or status_filter != 'all' %}
                             <a class="btn btn-secondary" href="{% url 'dashboard_users' %}?section={{ section }}">Clear</a>
                         {% endif %}
                     </form>
+                </div>
+
+                <div class="status-chip-row">
+                    {% if section == 'farmers' %}
+                        <a class="status-chip {% if status_filter == 'all' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=all">All</a>
+                        <a class="status-chip {% if status_filter == 'pending' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=pending">Pending</a>
+                        <a class="status-chip {% if status_filter == 'verified' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=verified">Verified</a>
+                        <a class="status-chip {% if status_filter == 'rejected' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=rejected">Rejected</a>
+                    {% elif section == 'logistics' %}
+                        <a class="status-chip {% if status_filter == 'all' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=all">All</a>
+                        <a class="status-chip {% if status_filter == 'pending' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=pending">Pending</a>
+                        <a class="status-chip {% if status_filter == 'healthy' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=healthy">Healthy</a>
+                        <a class="status-chip {% if status_filter == 'maintenance' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=maintenance">Maintenance</a>
+                        <a class="status-chip {% if status_filter == 'disabled' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=disabled">Disabled</a>
+                    {% elif section == 'businesses' %}
+                        <a class="status-chip {% if status_filter == 'all' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=all">All</a>
+                        <a class="status-chip {% if status_filter == 'pending' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=pending">Pending</a>
+                        <a class="status-chip {% if status_filter == 'approved' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=approved">Approved</a>
+                        <a class="status-chip {% if status_filter == 'rejected' %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ section }}&sort_field={{ sort_field }}&sort_dir={{ sort_dir }}&status_filter=rejected">Rejected</a>
+                    {% endif %}
                 </div>
 
                 {% if rows %}

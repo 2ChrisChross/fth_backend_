@@ -120,9 +120,10 @@ def _format_person_name(first_name=None, middle_name=None, last_name=None):
     return "-"
 
 
-def _dashboard_stage_rows(section, query, sort_field=None, sort_dir="asc"):
+def _dashboard_stage_rows(section, query, sort_field=None, sort_dir="asc", status_filter="all"):
     sort_field = sort_field or "last_name"
     sort_dir = "asc" if sort_dir not in {"asc", "desc"} else sort_dir
+    status_filter = status_filter or "all"
     descending = sort_dir == "desc"
 
     def order_value(*fields):
@@ -141,6 +142,13 @@ def _dashboard_stage_rows(section, query, sort_field=None, sort_dir="asc"):
             users = users.order_by(*order_value("user_id"))
         else:
             users = users.order_by(*order_value("last_name", "first_name", "middle_name", "user_id"))
+
+        if status_filter == "pending":
+            users = users.filter(is_verified__in=[0, None])
+        elif status_filter == "verified":
+            users = users.filter(is_verified__in=[1, True, "1"])
+        elif status_filter == "rejected":
+            users = users.filter(is_verified=2)
 
         if query:
             users = users.filter(
@@ -204,6 +212,15 @@ def _dashboard_stage_rows(section, query, sort_field=None, sort_dir="asc"):
         else:
             vehicles = vehicles.order_by(*order_value("user__last_name", "user__first_name", "user__middle_name", "vehicle_id"))
 
+        if status_filter == "pending":
+            vehicles = vehicles.filter(current_health_status__in=[0, None])
+        elif status_filter == "healthy":
+            vehicles = vehicles.filter(current_health_status=1)
+        elif status_filter == "maintenance":
+            vehicles = vehicles.filter(current_health_status=2)
+        elif status_filter == "disabled":
+            vehicles = vehicles.filter(current_health_status=3)
+
         if query:
             vehicles = vehicles.filter(
                 Q(plate_number__icontains=query)
@@ -248,6 +265,13 @@ def _dashboard_stage_rows(section, query, sort_field=None, sort_dir="asc"):
             businesses = businesses.order_by(*order_value("user__last_name", "user__first_name", "business_name"))
         else:
             businesses = businesses.order_by(*order_value("business_name", "user__last_name", "user__first_name"))
+
+        if status_filter == "pending":
+            businesses = businesses.filter(is_verified__in=[0, None])
+        elif status_filter == "approved":
+            businesses = businesses.filter(is_verified__in=[1, True, "1"])
+        elif status_filter == "rejected":
+            businesses = businesses.filter(is_verified=2)
 
         if query:
             businesses = businesses.filter(
@@ -370,6 +394,7 @@ def dashboard_users(request):
     query = (request.GET.get("q") or "").strip()
     sort_field = request.GET.get("sort_field", "last_name")
     sort_dir = request.GET.get("sort_dir", "asc")
+    status_filter = request.GET.get("status_filter", "all")
     section = (request.POST.get("section") or request.GET.get("section") or "farmers").strip() or "farmers"
     legacy_sort = request.GET.get("sort")
     if legacy_sort and not sort_field:
@@ -430,7 +455,7 @@ def dashboard_users(request):
                             new_values={"is_verified": business.is_verified},
                             request=request,
                         )
-        return redirect(f"/dashboard/?section={section}&q={query}&sort_field={sort_field}&sort_dir={sort_dir}")
+        return redirect(f"/dashboard/?section={section}&q={query}&sort_field={sort_field}&sort_dir={sort_dir}&status_filter={status_filter}")
 
     if not database_ready_for_dashboard():
         return render(
@@ -441,13 +466,14 @@ def dashboard_users(request):
                 "query": query,
                 "sort_field": sort_field,
                 "sort_dir": sort_dir,
+                "status_filter": status_filter,
                 "section": section,
                 "db_error": """The database tables for this app have not been created yet. 
                 Run your migrations or connect the project to the correct database.""",
             },
         )
 
-    dashboard_rows = _dashboard_stage_rows(section, query, sort_field, sort_dir)
+    dashboard_rows = _dashboard_stage_rows(section, query, sort_field, sort_dir, status_filter)
     sidebar_sections = [
         {"key": "farmers", "label": "Farmers"},
         {"key": "logistics", "label": "Logistics"},
@@ -464,6 +490,7 @@ def dashboard_users(request):
             "query": query,
             "sort_field": sort_field,
             "sort_dir": sort_dir,
+            "status_filter": status_filter,
             "section": section,
             "sections": sidebar_sections,
         },

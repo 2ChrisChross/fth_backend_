@@ -79,18 +79,11 @@ WSGI_APPLICATION = 'fth_backend.wsgi.application'
 DEFAULT_DATABASE_URL = "postgresql://root:75uSbzW56VuY66lAWhb4W3ABDZHjXROG@dpg-dah5ghh42hec73esq7eg-a.singapore-postgres.render.com/farmtohome_db"
 database_url = os.environ.get('DATABASE_URL', DEFAULT_DATABASE_URL)
 
+if database_url is None:
+    database_url = DEFAULT_DATABASE_URL
+
 if isinstance(database_url, bytes):
     database_url = database_url.decode('utf-8')
-
-if database_url and (database_url.startswith("b'") or database_url.startswith('b"')):
-    try:
-        import ast
-        database_url = ast.literal_eval(database_url)
-    except (ValueError, SyntaxError):
-        database_url = DEFAULT_DATABASE_URL
-
-if not database_url:
-    database_url = DEFAULT_DATABASE_URL
 
 DATABASES = {'default': dj_database_url.parse(database_url)}
 
