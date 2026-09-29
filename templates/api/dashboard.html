@@ -199,10 +199,16 @@
             <div class="brand">FTH</div>
             <nav class="nav-section">
                 {% for item in sections %}
-                    {% if item.key == 'reports' %}
+                    {% if item.key == 'farmers' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'farmers:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'businesses' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'businesses:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'logistics' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'logistics:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'reports' %}
                         <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_reports' %}">{{ item.label }}</a>
                     {% else %}
-                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ item.key }}">{{ item.label }}</a>
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{{ dashboard_url }}">{{ item.label }}</a>
                     {% endif %}
                 {% endfor %}
             </nav>
@@ -213,11 +219,13 @@
                 <h1 class="title">{{ section|title }}</h1>
                 <div class="actions">
                     {% if section == 'farmers' %}
-                        <a class="btn btn-primary" href="{% url 'dashboard_user_create' %}">Add New User</a>
+                        <a class="btn btn-primary" href="{% url 'farmers:create' %}">Add New User</a>
                     {% elif section == 'businesses' %}
-                        <a class="btn btn-primary" href="{% url 'dashboard_entity_create' 'businesses' %}">Add New Business</a>
+                        <a class="btn btn-primary" href="{% url 'businesses:create' %}">Add New Business</a>
+                        <a class="btn btn-primary" href="{% url 'logistics:create' %}">Add New Logistics</a>
                     {% elif section == 'logistics' %}
-                        <a class="btn btn-primary" href="{% url 'dashboard_entity_create' 'logistics' %}">Add New Logistics</a>
+                        <a class="btn btn-primary" href="{% url 'logistics:create' %}">Add New Logistics</a>
+                        <a class="btn btn-primary" href="{% url 'businesses:create' %}">Add New Business</a>
                     {% endif %}
                 </div>
             </div>
@@ -261,7 +269,7 @@
 
                         <button class="btn btn-secondary" type="submit">Filter</button>
                         {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'farm_size' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' or status_filter != 'all' %}
-                            <a class="btn btn-secondary" href="{% url 'dashboard_users' %}?section={{ section }}">Clear</a>
+                            <a class="btn btn-secondary" href="{{ dashboard_url }}">Clear</a>
                         {% endif %}
                     </form>
                 </div>
@@ -452,8 +460,8 @@
                                             </form>
                                         </td>
                                         <td>
-                                            <a class="btn btn-secondary" href="{% url 'dashboard_user_edit' row.entity.user_id %}">Edit</a>
-                                            <a class="btn btn-danger" href="{% url 'dashboard_user_delete' row.entity.user_id %}">Delete</a>
+                                            <a class="btn btn-secondary" href="{% url 'farmers:edit' row.entity.user_id %}">Edit</a>
+                                            <a class="btn btn-danger" href="{% url 'farmers:delete' row.entity.user_id %}">Delete</a>
                                         </td>
                                     {% elif section == 'logistics' %}
                                         <td>{{ row.name }}</td>

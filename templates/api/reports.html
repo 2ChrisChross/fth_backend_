@@ -148,7 +148,13 @@
             <div class="brand">FTH</div>
             <nav class="nav-section">
                 {% for item in sections %}
-                    {% if item.key == 'reports' %}
+                    {% if item.key == 'farmers' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'farmers:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'businesses' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'businesses:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'logistics' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'logistics:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'reports' %}
                         <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_reports' %}">{{ item.label }}</a>
                     {% else %}
                         <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_users' %}?section={{ item.key }}">{{ item.label }}</a>
@@ -160,7 +166,7 @@
         <main class="main">
             <div class="topbar">
                 <h1 class="title">Reports</h1>
-                <a class="btn btn-secondary" href="{% url 'dashboard_users' %}?section=farmers">Back to dashboard</a>
+                <a class="btn btn-secondary" href="{% url 'farmers:dashboard' %}">Back to dashboard</a>
             </div>
 
             {% if db_error %}

@@ -1,57 +1,19 @@
 import json
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.contrib.auth.hashers import make_password
 from django.db import connection
 from django.db.models import F, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.crypto import get_random_string
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import Address, AuditLog, Business, DeliveryTrip, ElectronicDocument, EnumeratedValue, Farm, PhoneNumber, User, Vehicle
+from businesses.models import Business
+from logistics.models import Vehicle
 
-
-def _resolve_enum_order_id(enum_type, raw_value):
-    if raw_value is None:
-        return None
-
-    value = str(raw_value).strip()
-    if value == "":
-        return None
-
-    if value.isdigit():
-        return int(value)
-
-    candidates = ["order_id", "ordering"]
-    with connection.cursor() as cursor:
-        for column in candidates:
-            try:
-                cursor.execute(
-                    (
-                        f'SELECT {column} FROM "enumerated_values" WHERE LOWER(type) = LOWER(%s) '
-                        f'AND LOWER(value) = LOWER(%s) LIMIT 1'
-                    ),
-                    [str(enum_type), value],
-                )
-                row = cursor.fetchone()
-                if row:
-                    return row[0]
-            except Exception:
-                continue
-
-    try:
-        enum = EnumeratedValue.objects.filter(type__iexact=str(enum_type), value__iexact=value).first()
-        if enum is not None:
-            if hasattr(enum, "order_id") and enum.order_id is not None:
-                return enum.order_id
-            if hasattr(enum, "ordering") and enum.ordering is not None:
-                return enum.ordering
-        return None
-    except Exception:
-        return None
+from .models import Address, AuditLog, DeliveryTrip, ElectronicDocument, Farm, PhoneNumber, User
 
 
 def index(request):
@@ -118,6 +80,17 @@ def _format_person_name(first_name=None, middle_name=None, last_name=None):
     if middle:
         return middle
     return "-"
+
+
+def _dashboard_url(section):
+    route_names = {
+        "farmers": "farmers:dashboard",
+        "businesses": "businesses:dashboard",
+        "logistics": "logistics:dashboard",
+    }
+    if section == "audit_logs":
+        return f"{reverse('dashboard_users')}?section=audit_logs"
+    return reverse(route_names.get(section, "farmers:dashboard"))
 
 
 def _dashboard_stage_rows(section, query, sort_field=None, sort_dir="asc", status_filter="all"):
@@ -408,12 +381,12 @@ def dashboard_reports(request):
     )
 
 
-def dashboard_users(request):
+def dashboard_users(request, section_override=None):
     query = (request.GET.get("q") or "").strip()
     sort_field = request.GET.get("sort_field", "last_name")
     sort_dir = request.GET.get("sort_dir", "asc")
     status_filter = request.GET.get("status_filter", "all")
-    section = (request.POST.get("section") or request.GET.get("section") or "farmers").strip() or "farmers"
+    section = section_override or (request.POST.get("section") or request.GET.get("section") or "farmers").strip() or "farmers"
     legacy_sort = request.GET.get("sort")
     if legacy_sort and not sort_field:
         sort_field = legacy_sort
@@ -473,7 +446,19 @@ def dashboard_users(request):
                             new_values={"is_verified": business.is_verified},
                             request=request,
                         )
-        return redirect(f"/dashboard/?section={section}&q={query}&sort_field={sort_field}&sort_dir={sort_dir}&status_filter={status_filter}")
+        dashboard_url = _dashboard_url(section)
+        separator = "&" if "?" in dashboard_url else "?"
+        return redirect(
+            f"{dashboard_url}{separator}q={query}&sort_field={sort_field}&sort_dir={sort_dir}&status_filter={status_filter}"
+        )
+
+    sidebar_sections = [
+        {"key": "farmers", "label": "Farmers"},
+        {"key": "logistics", "label": "Logistics"},
+        {"key": "businesses", "label": "Businesses"},
+        {"key": "reports", "label": "Reports"},
+        {"key": "audit_logs", "label": "Audit Logs"},
+    ]
 
     if not database_ready_for_dashboard():
         return render(
@@ -486,19 +471,14 @@ def dashboard_users(request):
                 "sort_dir": sort_dir,
                 "status_filter": status_filter,
                 "section": section,
+                "dashboard_url": _dashboard_url(section),
+                "sections": sidebar_sections,
                 "db_error": """The database tables for this app have not been created yet. 
                 Run your migrations or connect the project to the correct database.""",
             },
         )
 
     dashboard_rows = _dashboard_stage_rows(section, query, sort_field, sort_dir, status_filter)
-    sidebar_sections = [
-        {"key": "farmers", "label": "Farmers"},
-        {"key": "logistics", "label": "Logistics"},
-        {"key": "businesses", "label": "Businesses"},
-        {"key": "reports", "label": "Reports"},
-        {"key": "audit_logs", "label": "Audit Logs"},
-    ]
 
     return render(
         request,
@@ -510,198 +490,20 @@ def dashboard_users(request):
             "sort_dir": sort_dir,
             "status_filter": status_filter,
             "section": section,
+            "dashboard_url": _dashboard_url(section),
             "sections": sidebar_sections,
         },
     )
-
-    if request.method == "POST":
-        target_id = request.POST.get("target_id")
-        stage = request.POST.get("stage")
-        if target_id and stage is not None:
-            try:
-                stage_value = int(stage)
-            except (TypeError, ValueError):
-                stage_value = None
-
-            if stage_value is not None:
-                if section == "farmers":
-                    user = User.objects.filter(user_id=target_id).first()
-                    if user is not None:
-                        previous = _serialize_model(user)
-                        user.is_verified = stage_value
-                        user.save(update_fields=["is_verified"])
-                        _log_audit_change(
-                            user=user,
-                            action_type="UPDATE_STATUS",
-                            target_table="USERS",
-                            target_id=user.user_id,
-                            old_values={"is_verified": previous.get("is_verified")},
-                            new_values={"is_verified": user.is_verified},
-                            request=request,
-                        )
-                elif section == "logistics":
-                    vehicle = Vehicle.objects.filter(vehicle_id=target_id).first()
-                    if vehicle is not None:
-                        previous = _serialize_model(vehicle)
-                        vehicle.current_health_status = stage_value
-                        vehicle.save(update_fields=["current_health_status"])
-                        _log_audit_change(
-                            user=vehicle.user,
-                            action_type="UPDATE_STATUS",
-                            target_table="VEHICLES",
-                            target_id=vehicle.vehicle_id,
-                            old_values={"current_health_status": previous.get("current_health_status")},
-                            new_values={"current_health_status": vehicle.current_health_status},
-                            request=request,
-                        )
-                elif section == "businesses":
-                    business = Business.objects.filter(business_id=target_id).first()
-                    if business is not None:
-                        previous = _serialize_model(business)
-                        business.is_verified = stage_value
-                        business.save(update_fields=["is_verified"])
-                        _log_audit_change(
-                            user=business.user,
-                            action_type="UPDATE_STATUS",
-                            target_table="BUSINESSES",
-                            target_id=business.business_id,
-                            old_values={"is_verified": previous.get("is_verified")},
-                            new_values={"is_verified": business.is_verified},
-                            request=request,
-                        )
-        return redirect(f"/dashboard/?section={section}&q={query}")
-
-    if not database_ready_for_dashboard():
-        return render(
-            request,
-            "api/dashboard.html",
-            {
-                "rows": [],
-                "query": query,
-                "sort": sort,
-                "section": section,
-                "db_error": """The database tables for this app have not been created yet. 
-                Run your migrations or connect the project to the correct database.""",
-            },
-        )
-
-    dashboard_rows = _dashboard_stage_rows(section, query, sort)
-    sidebar_sections = [
-        {"key": "farmers", "label": "Farmers"},
-        {"key": "logistics", "label": "Logistics"},
-        {"key": "businesses", "label": "Businesses"},
-        {"key": "reports", "label": "Reports"},
-        {"key": "audit_logs", "label": "Audit Logs"},
-    ]
-
-    return render(
-        request,
-        "api/dashboard.html",
-        {
-            "rows": dashboard_rows,
-            "query": query,
-            "sort": sort,
-            "section": section,
-            "sections": sidebar_sections,
-        },
-    )
-
 
 def dashboard_entity_form(request, section="farmers"):
-    if section not in {"businesses", "logistics"}:
-        return redirect("dashboard_users")
+    if section == "businesses":
+        from businesses.views import create
+    elif section == "logistics":
+        from logistics.views import create
+    else:
+        return redirect(_dashboard_url("farmers"))
 
-    if not database_ready_for_dashboard():
-        return render(
-            request,
-            "api/entity_form.html",
-            {
-                "section": section,
-                "users": [],
-                "db_error": """The database tables for this app have not been created yet. 
-                Run your migrations or connect the correct database.""",
-            },
-        )
-
-    users = User.objects.order_by("first_name", "last_name", "user_id")
-
-    if request.method == "POST":
-        owner_id = request.POST.get("user_id")
-        owner = User.objects.filter(user_id=owner_id).first() if owner_id else None
-
-        if section == "businesses":
-            business_name = (request.POST.get("business_name") or "").strip()
-            registration_number = (request.POST.get("registration_number") or "").strip()
-            business_type = request.POST.get("business_type")
-            is_verified = request.POST.get("is_verified", 0)
-
-            if not owner or not business_name:
-                return render(
-                    request,
-                    "api/entity_form.html",
-                    {"section": section, "users": users, "error": "An owner and business name are required."},
-                )
-
-            business = Business.objects.create(
-                user=owner,
-                business_name=business_name,
-                business_type=int(business_type) if business_type and str(business_type).isdigit() else None,
-                registration_number=registration_number or None,
-                is_verified=int(is_verified) if str(is_verified).isdigit() else 0,
-                date_time_created=timezone.now(),
-            )
-            _log_audit_change(
-                user=owner,
-                action_type="CREATE",
-                target_table="BUSINESSES",
-                target_id=business.business_id,
-                old_values={},
-                new_values=_serialize_model(business),
-                request=request,
-            )
-
-        elif section == "logistics":
-            truck_model = (request.POST.get("truck_model") or "").strip()
-            plate_number = (request.POST.get("plate_number") or "").strip()
-            max_weight = request.POST.get("max_weight_capacity_kg") or ""
-            max_volume = request.POST.get("max_volume_capacity_m3") or ""
-            current_health_status = request.POST.get("current_health_status", 0)
-
-            if not owner or not truck_model or not plate_number:
-                return render(
-                    request,
-                    "api/entity_form.html",
-                    {"section": section, "users": users, "error": "You must assign an owner and provide a vehicle model and plate number."},
-                )
-
-            vehicle = Vehicle.objects.create(
-                user=owner,
-                truck_model=truck_model,
-                plate_number=plate_number,
-                max_weight_capacity_kg=Decimal(str(max_weight)) if str(max_weight).strip() else None,
-                max_volume_capacity_m3=Decimal(str(max_volume)) if str(max_volume).strip() else None,
-                current_health_status=int(current_health_status) if str(current_health_status).isdigit() else 0,
-            )
-            _log_audit_change(
-                user=owner,
-                action_type="CREATE",
-                target_table="VEHICLES",
-                target_id=vehicle.vehicle_id,
-                old_values={},
-                new_values=_serialize_model(vehicle),
-                request=request,
-            )
-
-        return redirect(f"/dashboard/?section={section}")
-
-    return render(
-        request,
-        "api/entity_form.html",
-        {
-            "section": section,
-            "users": users,
-        },
-    )
+    return create(request)
 
 
 def dashboard_user_form(request, user_id=None):
@@ -714,6 +516,7 @@ def dashboard_user_form(request, user_id=None):
                 "phone": None,
                 "farm": None,
                 "address": None,
+                "dashboard_url": _dashboard_url("farmers"),
                 "db_error": """The database tables for this app have not been created yet. 
                 Run your migrations or connect the correct database.""",
             },
@@ -743,6 +546,10 @@ def dashboard_user_form(request, user_id=None):
                 "api/user_form.html",
                 {
                     "user": user,
+                    "phone": phone,
+                    "farm": farm,
+                    "address": address,
+                    "dashboard_url": _dashboard_url("farmers"),
                     "error": "First name and last name are required.",
                 },
             )
@@ -822,7 +629,7 @@ def dashboard_user_form(request, user_id=None):
             farm.farm_size_hectares = Decimal(str(farm_size)) if farm_size else farm.farm_size_hectares
             farm.save()
 
-        return redirect("dashboard_users")
+        return redirect(_dashboard_url("farmers"))
 
     return render(
         request,
@@ -832,6 +639,7 @@ def dashboard_user_form(request, user_id=None):
             "phone": phone,
             "farm": farm,
             "address": address,
+            "dashboard_url": _dashboard_url("farmers"),
         },
     )
 
@@ -861,198 +669,8 @@ def dashboard_user_delete(request, user_id):
             new_values={},
             request=request,
         )
-        return redirect("dashboard_users")
+        return redirect(_dashboard_url("farmers"))
     return render(request, "api/user_delete_confirm.html", {"user": user})
 
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def verify_user_code(request):
-    data = request.data or {}
-    phone_number = str(data.get("phone_number") or data.get("phonenumber") or "").strip()
-    verification_code = str(data.get("verification_code") or "").strip()
 
-    if phone_number == "" or verification_code == "":
-        return Response({"valid": False, "error": "phone_number and verification_code are required."}, status=400)
-
-    users = User.objects.filter(phone_numbers__mobile_number=phone_number).order_by("-user_id")
-    if not users.exists():
-        return Response({"valid": False}, status=200)
-
-    for user in users:
-        if user.verification_code is not None and user.verification_code.strip() == verification_code:
-            return Response({"valid": True}, status=200)
-
-    return Response({"valid": False}, status=200)
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def register_user(request):
-    data = request.data or {}
-
-    required_fields = [
-        "phonenumber",
-        "username",
-        "password",
-        "firstname",
-        "lastname",
-        
-        "region",
-        "province",
-        "municipality",
-        "baranggay",
-        "house_number",
-        "street",
-        "postal_code",
-        
-        "farm_size",
-        "farm_region",
-        "farm_province",
-        "farm_municipality",
-        "farm_barangay",
-        "farm_house_number",
-        "farm_street",
-        "farm_postal_code",
-    ]
-
-    missing_fields = [
-        field for field in required_fields
-        if field not in data or str(data.get(field, "")).strip() == ""
-    ]
-    if missing_fields:
-        return Response(
-            {"error": "Missing required fields", "missing_fields": missing_fields},
-            status=400,
-        )
-
-    phone_number = str(data.get("phonenumber", "")).strip()
-    username = str(data.get("username", "")).strip()
-    password = str(data.get("password", ""))
-    first_name = str(data.get("firstname", "")).strip()
-    middle_name = str(data.get("middle_name") or data.get("midle_name") or data.get("middlename") or "").strip()
-    last_name = str(data.get("lastname", "")).strip()
-
-    preferred_language = _resolve_enum_order_id("language", data.get("language") or data.get("preferred_language"))
-    role_order_id = _resolve_enum_order_id("role", data.get("role"))
-    onboarding_status_id = _resolve_enum_order_id(
-        "onboarding_status",
-        data.get("onboarding_status") or "Profile_Created",
-    )
-    payment_method_id = _resolve_enum_order_id("payment_method", data.get("payment_method") or data.get("preferred_payment_method"))
-
-    farm_region = str(data.get("farm_region") or data.get("region", "")).strip()
-    farm_province = str(data.get("farm_province") or data.get("province", "")).strip()
-    farm_municipality = str(data.get("farm_municipality") or data.get("municipality", "")).strip()
-    farm_barangay = str(data.get("farm_barangay") or data.get("baranggay", "")).strip()
-    farm_house_number = str(data.get("farm_house_number") or data.get("house_number", "")).strip()
-    farm_street = str(data.get("farm_street") or data.get("street", "")).strip()
-    farm_postal_code = str(data.get("farm_postal_code") or data.get("postal_code", "")).strip()
-
-    try:
-        farm_size = Decimal(str(data.get("farm_size", "")))
-    except (TypeError, InvalidOperation, ValueError):
-        return Response({"error": "farm_size must be a valid number."}, status=400)
-
-    document_urls = data.get("documents")
-    if document_urls is None:
-        document_urls = [data.get(f"document_{index}") for index in range(1, 5)]
-
-    if isinstance(document_urls, str):
-        document_urls = [document_urls]
-
-    document_urls = [str(url).strip() for url in document_urls if str(url).strip()]
-    if len(document_urls) < 4:
-        return Response({"error": "Please upload at least 4 document URLs."}, status=400)
-
-    document_type_names = data.get("document_types")
-    if document_type_names is None and data.get("document_type") is not None:
-        document_type_names = data.get("document_type")
-    if document_type_names is None:
-        document_type_names = ["Utility Bills", "Valid_ID", "Owner_Address", "Farm_Ownership"]
-    if isinstance(document_type_names, str):
-        document_type_names = [document_type_names]
-    document_type_names = [str(item).strip() for item in document_type_names if str(item).strip()]
-
-    user_address = Address.objects.create(
-        street_address=f"{data.get('house_number', '')} {data.get('street', '')}" if data.get("house_number") else data.get("street") or "",
-        barangay=data.get("baranggay") or data.get("barangay"),
-        municipality_city=data.get("municipality") or data.get("municipality_city"),
-        province=data.get("province"),
-        country=data.get("country") or "Philippines",
-        gps_coordinates=farm_region or data.get("region") or "",
-        address_type="residence",
-    )
-
-    user = User.objects.create(
-        user_id=user_address.address_id,
-        password_hash=make_password(password),
-        preferred_language=preferred_language,
-        role=role_order_id,
-        onboarding_status=onboarding_status_id,
-        preferred_payment_method=payment_method_id,
-        first_name=first_name,
-        middle_name=middle_name or None,
-        last_name=last_name,
-        verification_code=get_random_string(
-            8,
-            allowed_chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
-        ),
-    )
-
-    phone = PhoneNumber.objects.create(
-        user=user,
-        mobile_number=phone_number,
-        phone_type="mobile",
-        contact_status=1,
-        is_verified=0,
-    )
-
-    farm_address = Address.objects.create(
-        street_address=f"{farm_house_number} {farm_street}" if farm_house_number else farm_street,
-        barangay=farm_barangay,
-        municipality_city=farm_municipality,
-        province=farm_province,
-        country=data.get("farm_country") or "Philippines",
-        gps_coordinates=farm_region or "",
-        address_type="farm",
-    )
-
-    farm = Farm.objects.create(
-        user=user,
-        address=farm_address,
-        farm_size_hectares=farm_size,
-    )
-
-    document_type_order_ids = []
-    for index, url in enumerate(document_urls[:4], start=1):
-        file_extension = url.rsplit(".", 1)[-1].lower() if "." in url else ""
-        doc_type_name = document_type_names[index - 1] if index - 1 < len(document_type_names) else "Utility Bills"
-        doc_type_order_id = _resolve_enum_order_id("document_type", doc_type_name) or 1
-        document_type_order_ids.append(doc_type_order_id)
-        ElectronicDocument.objects.create(
-            user=user,
-            doc_title=f"Registration document {index}",
-            doc_type=doc_type_order_id,
-            file_url=url,
-            file_extension=file_extension,
-            verification_status=0,
-        )
-
-    return Response(
-        {
-            "message": "Registration successful.",
-            "user_id": user.user_id,
-            "username": username,
-            "phone_id": phone.phone_id,
-            "farm_id": farm.farm_id,
-            "otp": user.verification_code,
-            "language_order_id": preferred_language,
-            "role_order_id": role_order_id,
-            "onboarding_status_order_id": onboarding_status_id,
-            "payment_method_order_id": payment_method_id,
-            "document_type_order_ids": document_type_order_ids,
-            "document_count": len(document_urls[:4]),
-        },
-        status=201,
-    )

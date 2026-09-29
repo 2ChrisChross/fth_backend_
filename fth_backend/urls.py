@@ -20,6 +20,12 @@ from api import views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("dashboard/farmers/", include("farmers.urls")),
+    path("dashboard/businesses/", include("businesses.urls")),
+    path("dashboard/logistics/", include("logistics.urls")),
+    path("api/farmers/", include("farmers.api_urls")),
+    path("api/businesses/", include("businesses.api_urls")),
+    path("api/logistics/", include("logistics.api_urls")),
     path("api/", include("api.urls")),
     path("", include("api.urls")),
     path("", views.index, name="index"),

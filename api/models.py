@@ -7,6 +7,7 @@ class Address(models.Model):
     barangay = models.CharField(max_length=255, null=True, blank=True)
     municipality_city = models.CharField(max_length=255, null=True, blank=True)
     province = models.CharField(max_length=255, null=True, blank=True)
+    postal_code = models.CharField(max_length=20, null=True, blank=True)
     country = models.CharField(max_length=255, default='Philippines', blank=True)
     gps_coordinates = models.CharField(max_length=255, null=True, blank=True)
     address_type = models.CharField(max_length=255, null=True, blank=True)
@@ -33,7 +34,10 @@ class EnumeratedValue(models.Model):
 
 class User(models.Model):
     user_id = models.AutoField(primary_key=True)
+    username = models.CharField(max_length=150, null=True, blank=True, unique=True)
     password_hash = models.CharField(max_length=255, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    personal_address = models.ForeignKey('Address', on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     preferred_language = models.BigIntegerField(null=True, blank=True)
     role = models.BigIntegerField(null=True, blank=True)
     onboarding_status = models.BigIntegerField(null=True, blank=True)
@@ -82,25 +86,10 @@ class EmailAddress(models.Model):
         db_table = 'EMAIL_ADDRESSES'
 
 
-class Business(models.Model):
-    business_id = models.AutoField(primary_key=True)
-    user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='businesses')
-    business_name = models.CharField(max_length=255, null=True, blank=True)
-    business_type = models.BigIntegerField(null=True, blank=True)
-    registration_number = models.CharField(max_length=255, null=True, blank=True)
-    is_verified = models.SmallIntegerField(null=True, blank=True)
-    date_time_created = models.DateTimeField(null=True, blank=True)
-    date_time_deleted = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        managed = False
-        db_table = 'BUSINESSES'
-
-
 class ElectronicDocument(models.Model):
     doc_id = models.AutoField(primary_key=True)
     user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='electronic_documents')
-    vehicle = models.ForeignKey('Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='documents')
+    vehicle = models.ForeignKey('logistics.Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='documents')
     doc_title = models.CharField(max_length=255, null=True, blank=True)
     doc_type = models.BigIntegerField(null=True, blank=True)
     file_url = models.CharField(max_length=500, null=True, blank=True)
@@ -142,25 +131,6 @@ class Farm(models.Model):
     class Meta:
         managed = False
         db_table = 'FARMS'
-
-
-class Vehicle(models.Model):
-    vehicle_id = models.AutoField(primary_key=True)
-    user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='vehicles')
-    truck_model = models.CharField(max_length=255, null=True, blank=True)
-    plate_number = models.CharField(max_length=255, null=True, blank=True)
-    max_weight_capacity_kg = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    max_volume_capacity_m3 = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    body_type = models.BigIntegerField(null=True, blank=True)
-    is_air_conditioned = models.SmallIntegerField(null=True, blank=True)
-    fuel_consumption_liters_per_100km = models.SmallIntegerField(null=True, blank=True)
-    total_distance_meters = models.BigIntegerField(null=True, blank=True)
-    current_health_status = models.BigIntegerField(null=True, blank=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        managed = False
-        db_table = 'VEHICLES'
 
 
 class CropType(models.Model):
@@ -271,7 +241,7 @@ class OrderStatusHistory(models.Model):
 class DeliveryTrip(models.Model):
     trip_id = models.AutoField(primary_key=True)
     driver = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='delivery_trips')
-    vehicle = models.ForeignKey('Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='delivery_trips')
+    vehicle = models.ForeignKey('logistics.Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='delivery_trips')
     weight_utilization_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     volume_utilization_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     eta = models.DateTimeField(null=True, blank=True)
@@ -296,7 +266,7 @@ class TripManifest(models.Model):
 
 class VehicleStatusHistory(models.Model):
     history_id = models.AutoField(primary_key=True)
-    vehicle = models.ForeignKey('Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='status_history')
+    vehicle = models.ForeignKey('logistics.Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='status_history')
     trip = models.ForeignKey('DeliveryTrip', on_delete=models.SET_NULL, null=True, blank=True, related_name='vehicle_status_history')
     status_changed_to = models.BigIntegerField(null=True, blank=True)
     issue_type = models.CharField(max_length=255, null=True, blank=True)

@@ -1,13 +1,12 @@
 from django.urls import path
 
+from farmers.views import register_user, verify_user_code
 from .views import (
     dashboard_entity_form,
     dashboard_reports,
     dashboard_user_delete,
     dashboard_user_form,
     dashboard_users,
-    register_user,
-    verify_user_code,
 )
 
 urlpatterns = [
