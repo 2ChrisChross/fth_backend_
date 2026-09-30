@@ -1,1 +1,3 @@
 env/
+fth_backend\api\tests.py
+fth_backend\database_migrations

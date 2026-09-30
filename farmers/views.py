@@ -1,48 +1,48 @@
-from decimal import Decimal, InvalidOperation
-
 from django.contrib.auth.hashers import make_password
 from django.utils.crypto import get_random_string
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from api.models import Address, ElectronicDocument, Farm, PhoneNumber, User
-from api.registration import create_address, resolve_enum_order_id
-from api.views import dashboard_user_delete, dashboard_user_form, dashboard_users
+from farmers.models import Farm
+from shared.models import ElectronicDocument, PhoneNumber, User
+from shared.registration import (
+    create_address,
+    resolve_enum_order_id,
+)
 
-
-def dashboard(request):
-    return dashboard_users(request, section_override="farmers")
-
-
-def create(request):
-    return dashboard_user_form(request)
-
-
-def edit(request, user_id):
-    return dashboard_user_form(request, user_id=user_id)
-
-
-def delete(request, user_id):
-    return dashboard_user_delete(request, user_id)
+from .serializers import FarmerRegistrationSerializer
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def verify_user_code(request):
     data = request.data or {}
-    phone_number = str(data.get("phone_number") or data.get("phonenumber") or "").strip()
+    phone_number = str(
+        data.get("phone_number") or data.get("phonenumber") or ""
+    ).strip()
     verification_code = str(data.get("verification_code") or "").strip()
 
     if phone_number == "" or verification_code == "":
-        return Response({"valid": False, "error": "phone_number and verification_code are required."}, status=400)
+        return Response(
+            {
+                "valid": False,
+                "error": "phone_number and verification_code are required.",
+            },
+            status=400,
+        )
 
-    users = User.objects.filter(phone_numbers__mobile_number=phone_number).order_by("-user_id")
+    users = User.objects.filter(phone_numbers__mobile_number=phone_number).order_by(
+        "-user_id"
+    )
     if not users.exists():
         return Response({"valid": False}, status=200)
 
     for user in users:
-        if user.verification_code is not None and user.verification_code.strip() == verification_code:
+        if (
+            user.verification_code is not None
+            and user.verification_code.strip() == verification_code
+        ):
             if user.is_verified != 1:
                 user.is_verified = 1
                 user.save(update_fields=["is_verified"])
@@ -54,97 +54,57 @@ def verify_user_code(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_user(request):
-    data = request.data or {}
+    request_data = request.data if isinstance(request.data, dict) else {}
+    serializer = FarmerRegistrationSerializer(data=request_data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
 
-    required_fields = [
-        "phonenumber",
-        "username",
-        "password",
-        "firstname",
-        "lastname",
-        "region",
-        "province",
-        "municipality",
-        "baranggay",
-        "house_number",
-        "street",
-        "postal_code",
-        "farm_size",
-        "farm_region",
-        "farm_province",
-        "farm_municipality",
-        "farm_barangay",
-        "farm_house_number",
-        "farm_street",
-        "farm_postal_code",
-    ]
+    data = serializer.validated_data
+    phone_number = data["phonenumber"]
+    username = data["username"]
+    password = data["password"]
+    first_name = data["firstname"]
+    middle_name = (
+        data.get("middle_name")
+        or data.get("midle_name")
+        or data.get("middlename")
+        or ""
+    )
+    last_name = data["lastname"]
 
-    missing_fields = [
-        field for field in required_fields
-        if field not in data or str(data.get(field, "")).strip() == ""
-    ]
-    if missing_fields:
-        return Response(
-            {"error": "Missing required fields", "missing_fields": missing_fields},
-            status=400,
-        )
-
-    phone_number = str(data.get("phonenumber", "")).strip()
-    username = str(data.get("username", "")).strip()
-    password = str(data.get("password", ""))
-    first_name = str(data.get("firstname", "")).strip()
-    middle_name = str(data.get("middle_name") or data.get("midle_name") or data.get("middlename") or "").strip()
-    last_name = str(data.get("lastname", "")).strip()
-
-    if str(data.get("role", "")).strip() != "Farmer":
-        return Response({"error": "role must be Farmer."}, status=400)
-
-    preferred_language = resolve_enum_order_id("language", data.get("language") or data.get("preferred_language"))
+    preferred_language = resolve_enum_order_id(
+        "language", data.get("language") or data.get("preferred_language")
+    )
     role_order_id = resolve_enum_order_id("role", "Farmer")
     onboarding_status_id = resolve_enum_order_id(
         "onboarding_status",
         data.get("onboarding_status") or "Profile_Created",
     )
-    payment_method_id = resolve_enum_order_id("payment_method", data.get("payment_method") or data.get("preferred_payment_method"))
+    payment_method_id = resolve_enum_order_id(
+        "payment_method",
+        data.get("payment_method") or data.get("preferred_payment_method"),
+    )
 
-    farm_region = str(data.get("farm_region") or data.get("region", "")).strip()
-    farm_province = str(data.get("farm_province") or data.get("province", "")).strip()
-    farm_municipality = str(data.get("farm_municipality") or data.get("municipality", "")).strip()
-    farm_barangay = str(data.get("farm_barangay") or data.get("baranggay", "")).strip()
-    farm_house_number = str(data.get("farm_house_number") or data.get("house_number", "")).strip()
-    farm_street = str(data.get("farm_street") or data.get("street", "")).strip()
-    farm_postal_code = str(data.get("farm_postal_code") or data.get("postal_code", "")).strip()
-
-    try:
-        farm_size = Decimal(str(data.get("farm_size", "")))
-    except (TypeError, InvalidOperation, ValueError):
-        return Response({"error": "farm_size must be a valid number."}, status=400)
-
-    document_urls = data.get("documents")
-    if document_urls is None:
-        document_urls = [data.get(f"document_{index}") for index in range(1, 5)]
-
-    if isinstance(document_urls, str):
-        document_urls = [document_urls]
-
-    document_urls = [str(url).strip() for url in document_urls if str(url).strip()]
-    if len(document_urls) < 4:
-        return Response({"error": "Please upload at least 4 document URLs."}, status=400)
-
-    document_type_names = data.get("document_types")
-    if document_type_names is None and data.get("document_type") is not None:
-        document_type_names = data.get("document_type")
-    if document_type_names is None:
-        document_type_names = ["Utility Bills", "Valid_ID", "Owner_Address", "Farm_Ownership"]
-    if isinstance(document_type_names, str):
-        document_type_names = [document_type_names]
-    document_type_names = [str(item).strip() for item in document_type_names if str(item).strip()]
+    farm_region = data["farm_region"]
+    farm_province = data["farm_province"]
+    farm_municipality = data["farm_municipality"]
+    farm_barangay = data["farm_barangay"]
+    farm_house_number = data["farm_house_number"]
+    farm_street = data["farm_street"]
+    farm_postal_code = data["farm_postal_code"]
+    farm_size = data["farm_size"]
+    document_urls = data["document_urls"]
+    document_type_names = data["document_type_names"]
 
     user_address = create_address(
         {
-            "street_address": f"{data.get('house_number', '')} {data.get('street', '')}" if data.get("house_number") else data.get("street") or "",
+            "street_address": f"{data.get('house_number', '')} {data.get('street', '')}"
+            if data.get("house_number")
+            else data.get("street") or "",
             "barangay": data.get("baranggay") or data.get("barangay") or "",
-            "municipality_city": data.get("municipality") or data.get("municipality_city") or "",
+            "municipality_city": data.get("municipality")
+            or data.get("municipality_city")
+            or "",
             "province": data.get("province") or "",
             "postal_code": data.get("postal_code") or "",
             "country": data.get("country") or "Philippines",
@@ -154,7 +114,6 @@ def register_user(request):
     )
 
     user = User.objects.create(
-        user_id=user_address.address_id,
         username=username,
         password_hash=make_password(password),
         personal_address=user_address,
@@ -181,7 +140,9 @@ def register_user(request):
 
     farm_address = create_address(
         {
-            "street_address": f"{farm_house_number} {farm_street}" if farm_house_number else farm_street,
+            "street_address": f"{farm_house_number} {farm_street}"
+            if farm_house_number
+            else farm_street,
             "barangay": farm_barangay,
             "municipality_city": farm_municipality,
             "province": farm_province,
@@ -201,7 +162,11 @@ def register_user(request):
     document_type_order_ids = []
     for index, url in enumerate(document_urls[:4], start=1):
         file_extension = url.rsplit(".", 1)[-1].lower() if "." in url else ""
-        doc_type_name = document_type_names[index - 1] if index - 1 < len(document_type_names) else "Utility Bills"
+        doc_type_name = (
+            document_type_names[index - 1]
+            if index - 1 < len(document_type_names)
+            else "Utility Bills"
+        )
         doc_type_order_id = resolve_enum_order_id("document_type", doc_type_name) or 1
         document_type_order_ids.append(doc_type_order_id)
         ElectronicDocument.objects.create(

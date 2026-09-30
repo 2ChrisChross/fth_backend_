@@ -5,53 +5,116 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('api', '0001_initial'),
+        ("api", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='LogisticsBusiness',
+            name="LogisticsBusiness",
             fields=[
-                ('logistics_business_id', models.AutoField(primary_key=True, serialize=False)),
-                ('address', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='logistics_businesses', to='api.address')),
-                ('user', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='logistics_business', to='api.user')),
-                ('business_name', models.CharField(max_length=255)),
-                ('contact_phone', models.CharField(max_length=255)),
-                ('contact_email', models.CharField(max_length=255)),
-                ('is_verified', models.SmallIntegerField(default=0)),
-                ('date_time_created', models.DateTimeField(blank=True, null=True)),
-                ('date_time_deleted', models.DateTimeField(blank=True, null=True)),
+                (
+                    "logistics_business_id",
+                    models.AutoField(primary_key=True, serialize=False),
+                ),
+                (
+                    "address",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="logistics_businesses",
+                        to="api.address",
+                    ),
+                ),
+                (
+                    "user",
+                    models.OneToOneField(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="logistics_business",
+                        to="api.user",
+                    ),
+                ),
+                ("business_name", models.CharField(max_length=255)),
+                ("contact_phone", models.CharField(max_length=255)),
+                ("contact_email", models.CharField(max_length=255)),
+                ("is_verified", models.SmallIntegerField(default=0)),
+                ("date_time_created", models.DateTimeField(blank=True, null=True)),
+                ("date_time_deleted", models.DateTimeField(blank=True, null=True)),
             ],
             options={
-                'db_table': 'LOGISTICS_BUSINESSES',
-                'managed': False,
+                "db_table": "LOGISTICS_BUSINESSES",
+                "managed": False,
             },
         ),
         migrations.CreateModel(
-            name='Vehicle',
+            name="Vehicle",
             fields=[
-                ('vehicle_id', models.AutoField(primary_key=True, serialize=False)),
-                ('logistics_business', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='vehicles', to='logistics.logisticsbusiness')),
-                ('user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='vehicles', to='api.user')),
-                ('truck_model', models.CharField(blank=True, max_length=255, null=True)),
-                ('plate_number', models.CharField(blank=True, max_length=255, null=True)),
-                ('max_weight_capacity_kg', models.DecimalField(blank=True, decimal_places=2, max_digits=10, null=True)),
-                ('max_volume_capacity_m3', models.DecimalField(blank=True, decimal_places=2, max_digits=10, null=True)),
-                ('body_type', models.BigIntegerField(blank=True, null=True)),
-                ('is_refrigerated', models.SmallIntegerField(default=0)),
-                ('is_air_conditioned', models.SmallIntegerField(blank=True, null=True)),
-                ('fuel_consumption_liters_per_100km', models.SmallIntegerField(blank=True, null=True)),
-                ('total_distance_meters', models.BigIntegerField(blank=True, null=True)),
-                ('current_health_status', models.BigIntegerField(blank=True, null=True)),
-                ('deleted_at', models.DateTimeField(blank=True, null=True)),
+                ("vehicle_id", models.AutoField(primary_key=True, serialize=False)),
+                (
+                    "logistics_business",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="vehicles",
+                        to="logistics.logisticsbusiness",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="vehicles",
+                        to="api.user",
+                    ),
+                ),
+                (
+                    "truck_model",
+                    models.CharField(blank=True, max_length=255, null=True),
+                ),
+                (
+                    "plate_number",
+                    models.CharField(blank=True, max_length=255, null=True),
+                ),
+                (
+                    "max_weight_capacity_kg",
+                    models.DecimalField(
+                        blank=True, decimal_places=2, max_digits=10, null=True
+                    ),
+                ),
+                (
+                    "max_volume_capacity_m3",
+                    models.DecimalField(
+                        blank=True, decimal_places=2, max_digits=10, null=True
+                    ),
+                ),
+                ("body_type", models.BigIntegerField(blank=True, null=True)),
+                ("is_refrigerated", models.SmallIntegerField(default=0)),
+                ("is_air_conditioned", models.SmallIntegerField(blank=True, null=True)),
+                (
+                    "fuel_consumption_liters_per_100km",
+                    models.SmallIntegerField(blank=True, null=True),
+                ),
+                (
+                    "total_distance_meters",
+                    models.BigIntegerField(blank=True, null=True),
+                ),
+                (
+                    "current_health_status",
+                    models.BigIntegerField(blank=True, null=True),
+                ),
+                ("deleted_at", models.DateTimeField(blank=True, null=True)),
             ],
             options={
-                'db_table': 'VEHICLES',
-                'managed': False,
+                "db_table": "VEHICLES",
+                "managed": False,
             },
         ),
     ]

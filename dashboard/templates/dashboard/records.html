@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTH Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f4f7fb;
+            color: #222;
+        }
+        .dashboard-shell {
+            display: flex;
+            min-height: 100vh;
+        }
+        .sidebar {
+            width: 260px;
+            background: #12233d;
+            color: #fff;
+            padding: 24px 18px;
+            box-sizing: border-box;
+        }
+        .brand {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 26px;
+            letter-spacing: 0.04em;
+        }
+        .nav-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .nav-link {
+            display: block;
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: #dfeafc;
+            background: transparent;
+            font-weight: 600;
+        }
+        .nav-link.active {
+            background: #1d4fbf;
+            color: #fff;
+        }
+        .main {
+            flex: 1;
+            padding: 28px;
+        }
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .title {
+            font-size: 2rem;
+            margin: 0;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 8px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background: #1f6feb;
+            color: white;
+        }
+        .btn-secondary {
+            background: #e7edf8;
+            color: #1a2b4d;
+        }
+        .btn-danger {
+            background: #d9534f;
+            color: white;
+        }
+        .search-form {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        .search-form form {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        input, select {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #d7dfe9;
+            font-size: 14px;
+        }
+        input[type="text"] {
+            min-width: 220px;
+            flex: 1;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        th, td {
+            text-align: left;
+            padding: 14px 12px;
+            border-bottom: 1px solid #edf1f7;
+            vertical-align: top;
+        }
+        th {
+            background: #eef4ff;
+            color: #183153;
+        }
+        .badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: #edf7ed;
+            color: #1f7a36;
+        }
+        .muted {
+            color: #667085;
+        }
+        .doc-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+        .doc-list li {
+            margin-bottom: 6px;
+        }
+        .status-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .status-form select {
+            min-width: 110px;
+        }
+        .status-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 14px 0 18px;
+        }
+        .status-chip-form {
+            display: inline-block;
+        }
+        .status-chip {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 999px;
+            text-decoration: none;
+            background: #edf3ff;
+            color: #1d4fbf;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid #dfe9ff;
+            cursor: pointer;
+        }
+        .status-chip.active {
+            background: #1d4fbf;
+            color: white;
+            border-color: #1d4fbf;
+        }
+        .empty {
+            padding: 24px;
+            text-align: center;
+            color: #667085;
+            background: white;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-shell">
+        <aside class="sidebar">
+            <div class="brand">FTH</div>
+            <nav class="nav-section">
+                {% for item in sections %}
+                    {% if item.key == 'farmers' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'farmers:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'businesses' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'businesses:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'logistics' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'logistics:dashboard' %}">{{ item.label }}</a>
+                    {% elif item.key == 'reports' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_reports' %}">{{ item.label }}</a>
+                    {% elif item.key == 'audit_logs' %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_audit_logs' %}">{{ item.label }}</a>
+                    {% else %}
+                        <a class="nav-link {% if section == item.key %}active{% endif %}" href="{{ dashboard_url }}">{{ item.label }}</a>
+                    {% endif %}
+                {% endfor %}
+            </nav>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <h1 class="title">{{ section_title }}</h1>
+                <div class="actions">
+                    {% if section == 'farmers' %}
+                        <a class="btn btn-primary" href="{% url 'farmers:create' %}">Add New Farmer</a>
+                    {% elif section == 'businesses' %}
+                        <a class="btn btn-primary" href="{% url 'businesses:create' %}">Add New Bulk Buyer</a>
+                    {% elif section == 'logistics' %}
+                        <a class="btn btn-primary" href="{% url 'logistics:create' %}">Add New Vehicle</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if db_error %}
+                <div class="search-form" style="background: #fff5f5; border: 1px solid #f4c7c7; color: #7a1f1f;">
+                    {{ db_error }}
+                </div>
+            {% else %}
+                <div class="search-form">
+                    <form method="get">
+                        <input type="hidden" name="section" value="{{ section }}">
+                        <input type="text" name="q" value="{{ query }}" placeholder="Search records...">
+
+                        <select name="sort_field">
+                            {% if section == 'farmers' %}
+                                <option value="last_name" {% if sort_field == 'last_name' %}selected{% endif %}>Last name</option>
+                                <option value="verification" {% if sort_field == 'verification' %}selected{% endif %}>Verification stage</option>
+                                <option value="farm_size" {% if sort_field == 'farm_size' %}selected{% endif %}>Farm size</option>
+                                <option value="newest" {% if sort_field == 'newest' %}selected{% endif %}>Newest</option>
+                            {% elif section == 'logistics' %}
+                                <option value="last_name" {% if sort_field == 'last_name' %}selected{% endif %}>Owner name</option>
+                                <option value="status" {% if sort_field == 'status' %}selected{% endif %}>Health stage</option>
+                                <option value="capacity" {% if sort_field == 'capacity' %}selected{% endif %}>Capacity</option>
+                                <option value="plate_number" {% if sort_field == 'plate_number' %}selected{% endif %}>Plate number</option>
+                            {% elif section == 'businesses' %}
+                                <option value="business_name" {% if sort_field == 'business_name' %}selected{% endif %}>Bulk buyer name</option>
+                                <option value="status" {% if sort_field == 'status' %}selected{% endif %}>Verification stage</option>
+                                <option value="owner" {% if sort_field == 'owner' %}selected{% endif %}>Owner name</option>
+                            {% else %}
+                                <option value="newest" {% if sort_field == 'newest' or sort_field == 'created_at' %}selected{% endif %}>Newest</option>
+                                <option value="action" {% if sort_field == 'action' %}selected{% endif %}>Action type</option>
+                                <option value="user" {% if sort_field == 'user' %}selected{% endif %}>User name</option>
+                            {% endif %}
+                        </select>
+
+                        <select name="sort_dir">
+                            <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
+                            <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
+                        </select>
+
+                        <button class="btn btn-secondary" type="submit">Filter</button>
+                        {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'farm_size' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' or status_filter != 'all' %}
+                            <a class="btn btn-secondary" href="{{ dashboard_url }}">Clear</a>
+                        {% endif %}
+                    </form>
+                </div>
+
+                <div class="status-chip-row">
+                    {% if section == 'farmers' %}
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="all">
+                            <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="pending">
+                            <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="verified">
+                            <button type="submit" class="status-chip {% if status_filter == 'verified' %}active{% endif %}">Verified</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="rejected">
+                            <button type="submit" class="status-chip {% if status_filter == 'rejected' %}active{% endif %}">Rejected</button>
+                        </form>
+                    {% elif section == 'logistics' %}
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="all">
+                            <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="pending">
+                            <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="healthy">
+                            <button type="submit" class="status-chip {% if status_filter == 'healthy' %}active{% endif %}">Healthy</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="maintenance">
+                            <button type="submit" class="status-chip {% if status_filter == 'maintenance' %}active{% endif %}">Maintenance</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="disabled">
+                            <button type="submit" class="status-chip {% if status_filter == 'disabled' %}active{% endif %}">Disabled</button>
+                        </form>
+                    {% elif section == 'businesses' %}
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="all">
+                            <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="pending">
+                            <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="approved">
+                            <button type="submit" class="status-chip {% if status_filter == 'approved' %}active{% endif %}">Approved</button>
+                        </form>
+                        <form class="status-chip-form" method="get">
+                            <input type="hidden" name="section" value="{{ section }}">
+                            <input type="hidden" name="q" value="{{ query }}">
+                            <input type="hidden" name="sort_field" value="{{ sort_field }}">
+                            <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                            <input type="hidden" name="status_filter" value="rejected">
+                            <button type="submit" class="status-chip {% if status_filter == 'rejected' %}active{% endif %}">Rejected</button>
+                        </form>
+                    {% endif %}
+                </div>
+
+                {% if rows %}
+                    <table>
+                        <thead>
+                            <tr>
+                                {% if section == 'farmers' %}
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Farm Size</th>
+                                    <th>Verification Code</th>
+                                    <th>Location</th>
+                                    <th>Documents</th>
+                                    <th>Created</th>
+                                    <th>Stage</th>
+                                    <th>Actions</th>
+                                {% elif section == 'logistics' %}
+                                    <th>Driver</th>
+                                    <th>Plate Number</th>
+                                    <th>Vehicle</th>
+                                    <th>Created</th>
+                                    <th>Stage</th>
+                                {% elif section == 'businesses' %}
+                                    <th>Bulk Buyer</th>
+                                    <th>Owner</th>
+                                    <th>Registration</th>
+                                    <th>Created</th>
+                                    <th>Stage</th>
+                                {% else %}
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>Target</th>
+                                    <th>Time</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                                <tr>
+                                    {% if section == 'farmers' %}
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.phone }}</td>
+                                        <td>{{ row.farm_size }}</td>
+                                        <td><strong>{{ row.verification_code }}</strong></td>
+                                        <td>{{ row.location }}</td>
+                                        <td>
+                                            {% if row.documents %}
+                                                <ul class="doc-list">
+                                                    {% for doc in row.documents %}
+                                                        <li><a href="{{ doc.file_url }}" target="_blank">{{ doc.doc_title }}</a></li>
+                                                    {% endfor %}
+                                                </ul>
+                                            {% else %}
+                                                <span class="muted">No docs</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if row.created_at %}
+                                                {{ row.created_at|date:"M d, Y" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <form class="status-form" method="post">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="section" value="{{ section }}">
+                                                <input type="hidden" name="target_id" value="{{ row.id }}">
+                                                <select name="stage">
+                                                    {% for value, label in row.status_options %}
+                                                        <option value="{{ value }}" {% if row.status_value == value %}selected{% endif %}>{{ label }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button class="btn btn-secondary" type="submit">Save</button>
+                                            </form>
+                                        </td>
+                                        <td>
+                                            <a class="btn btn-secondary" href="{% url 'farmers:edit' row.entity.user_id %}">Edit</a>
+                                            <a class="btn btn-danger" href="{% url 'farmers:delete' row.entity.user_id %}">Delete</a>
+                                        </td>
+                                    {% elif section == 'logistics' %}
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.plate_number }}</td>
+                                        <td>{{ row.model }}</td>
+                                        <td>
+                                            {% if row.created_at %}
+                                                {{ row.created_at|date:"M d, Y" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <form class="status-form" method="post">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="section" value="{{ section }}">
+                                                <input type="hidden" name="target_id" value="{{ row.id }}">
+                                                <select name="stage">
+                                                    {% for value, label in row.status_options %}
+                                                        <option value="{{ value }}" {% if row.status_value == value %}selected{% endif %}>{{ label }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button class="btn btn-secondary" type="submit">Save</button>
+                                            </form>
+                                        </td>
+                                    {% elif section == 'businesses' %}
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.owner }}</td>
+                                        <td>{{ row.registration_number }}</td>
+                                        <td>
+                                            {% if row.created_at %}
+                                                {{ row.created_at|date:"M d, Y" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <form class="status-form" method="post">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="section" value="{{ section }}">
+                                                <input type="hidden" name="target_id" value="{{ row.id }}">
+                                                <select name="stage">
+                                                    {% for value, label in row.status_options %}
+                                                        <option value="{{ value }}" {% if row.status_value == value %}selected{% endif %}>{{ label }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button class="btn btn-secondary" type="submit">Save</button>
+                                            </form>
+                                        </td>
+                                    {% else %}
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.action }}</td>
+                                        <td>{{ row.target }}</td>
+                                        <td>{{ row.created_at }}</td>
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="empty">No {{ section }} match your search.</div>
+                {% endif %}
+            {% endif %}
+        </main>
+    </div>
+</body>
+</html>

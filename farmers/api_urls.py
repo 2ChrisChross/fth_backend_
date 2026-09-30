@@ -2,7 +2,6 @@ from django.urls import path
 
 from .views import register_user, verify_user_code
 
-
 app_name = "farmers_api"
 
 urlpatterns = [

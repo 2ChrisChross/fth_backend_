@@ -5,30 +5,53 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('api', '0001_initial'),
+        ("api", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Business',
+            name="Business",
             fields=[
-                ('business_id', models.AutoField(primary_key=True, serialize=False)),
-                ('address', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='businesses', to='api.address')),
-                ('user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='businesses', to='api.user')),
-                ('business_name', models.CharField(blank=True, max_length=255, null=True)),
-                ('business_type', models.BigIntegerField(blank=True, null=True)),
-                ('registration_number', models.CharField(blank=True, max_length=255, null=True)),
-                ('is_verified', models.SmallIntegerField(blank=True, null=True)),
-                ('date_time_created', models.DateTimeField(blank=True, null=True)),
-                ('date_time_deleted', models.DateTimeField(blank=True, null=True)),
+                ("business_id", models.AutoField(primary_key=True, serialize=False)),
+                (
+                    "address",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="businesses",
+                        to="api.address",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="businesses",
+                        to="api.user",
+                    ),
+                ),
+                (
+                    "business_name",
+                    models.CharField(blank=True, max_length=255, null=True),
+                ),
+                ("business_type", models.BigIntegerField(blank=True, null=True)),
+                (
+                    "registration_number",
+                    models.CharField(blank=True, max_length=255, null=True),
+                ),
+                ("is_verified", models.SmallIntegerField(blank=True, null=True)),
+                ("date_time_created", models.DateTimeField(blank=True, null=True)),
+                ("date_time_deleted", models.DateTimeField(blank=True, null=True)),
             ],
             options={
-                'db_table': 'BUSINESSES',
-                'managed': False,
+                "db_table": "BUSINESSES",
+                "managed": False,
             },
         ),
     ]
