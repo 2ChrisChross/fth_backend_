@@ -1,0 +1,65 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Farmer Application | FTH Dashboard{% endblock %}
+{% block extra_head %}
+    <style>
+        main { max-width: 980px; margin: 0 auto; padding: 28px; }
+        section { margin: 22px 0; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 11px; border-bottom: 1px solid #e5e9ef; text-align: left; }
+        th { width: 220px; background: #eef4ff; }
+        a, button { color: #183153; }
+        input, button { padding: 9px 11px; font: inherit; }
+        .documents, .events { padding-left: 20px; }
+    </style>
+{% endblock %}
+{% block page_title %}Farmer Application{% endblock %}
+{% block header_actions %}
+    <a class="button" href="{% url 'dashboard_code_requests' %}">Back to requests</a>
+{% endblock %}
+{% block content %}
+    <section>
+        <h2>Farmer</h2>
+        <table>
+            <tbody>
+                <tr><th>Name</th><td>{{ farmer.first_name }} {{ farmer.middle_name }} {{ farmer.last_name }}</td></tr>
+                <tr><th>Username</th><td>{{ farmer.username|default:"-" }}</td></tr>
+                <tr><th>Phone</th><td>{{ phone.mobile_number|default:"-" }}</td></tr>
+                <tr><th>Account verified</th><td>{{ farmer.is_verified|yesno:"Yes,No" }}</td></tr>
+                <tr><th>Request</th><td>{{ code_request.get_purpose_display }} / {{ code_request.get_status_display }}</td></tr>
+                <tr><th>Requested</th><td>{{ code_request.requested_at|date:"Y-m-d H:i" }}</td></tr>
+                <tr><th>Code expires</th><td>{{ code_request.code_expires_at|date:"Y-m-d H:i"|default:"-" }}</td></tr>
+            </tbody>
+        </table>
+    </section>
+    <section>
+        <h2>Submitted documents</h2>
+        <ul class="documents">
+            {% for document in documents %}
+                <li><a href="{{ document.file_url }}" target="_blank" rel="noopener">{{ document.doc_title|default:"Document" }}</a></li>
+            {% empty %}
+                <li>No submitted documents.</li>
+            {% endfor %}
+        </ul>
+    </section>
+    <section>
+        <h2>Staff activity</h2>
+        <ul class="events">
+            {% for event in audit_events %}
+                <li>{{ event.created_at|date:"Y-m-d H:i" }}: {{ event.get_action_display }}{% if event.staff_user %} by {{ event.staff_user.get_username }}{% endif %}{% if event.reason %} ({{ event.reason }}){% endif %}</li>
+            {% empty %}
+                <li>No staff activity recorded.</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% if can_manually_verify and farmer.is_verified != 1 %}
+        <section>
+            <h2>Manual verification</h2>
+            <form method="post">
+                {% csrf_token %}
+                <label for="reason">Reason</label>
+                <input id="reason" name="reason" type="text" required>
+                <button type="submit">Verify farmer</button>
+            </form>
+        </section>
+    {% endif %}
+{% endblock %}

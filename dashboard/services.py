@@ -1,15 +1,25 @@
+from django.core.paginator import Paginator
 from django.db import connection
-from django.db.models import Q
+from django.db.models import OuterRef, Prefetch, Q, Subquery
 from django.urls import reverse
 
 from businesses.models import BulkBuyer
-from farmers.models import Farm
+from farmers.models import Farm, FarmerCodeRequest
 from logistics.models import Vehicle
-from shared.models import Address, AuditLog, ElectronicDocument, PhoneNumber, User
+from shared.models import (
+    Address,
+    AuditLog,
+    ElectronicDocument,
+    PhoneNumber,
+    User,
+)
+
+DASHBOARD_PAGE_SIZE = 50
 
 DASHBOARD_SECTIONS = [
     {"key": "reports", "label": "Reports"},
     {"key": "farmers", "label": "Farmers"},
+    {"key": "code_requests", "label": "Farmer Code Requests"},
     {"key": "logistics", "label": "Logistics"},
     {"key": "businesses", "label": "Bulk Buyers"},
     {"key": "audit_logs", "label": "Audit Logs"},
@@ -19,6 +29,7 @@ DASHBOARD_SECTIONS = [
 def database_ready_for_dashboard():
     required_models = (
         User,
+        FarmerCodeRequest,
         PhoneNumber,
         Farm,
         Address,
@@ -64,8 +75,25 @@ def format_person_name(first_name=None, middle_name=None, last_name=None):
     return "-"
 
 
+def _paginate_queryset(queryset, page_number, page_size):
+    if page_number is None:
+        return queryset, None
+    page_obj = Paginator(queryset, page_size).get_page(page_number)
+    return page_obj.object_list, page_obj
+
+
+def _page_result(rows, page_obj):
+    return (rows, page_obj) if page_obj is not None else rows
+
+
 def build_dashboard_rows(
-    section, query, sort_field=None, sort_dir="asc", status_filter="all"
+    section,
+    query,
+    sort_field=None,
+    sort_dir="asc",
+    status_filter="all",
+    page_number=None,
+    page_size=DASHBOARD_PAGE_SIZE,
 ):
     sort_field = sort_field or "last_name"
     sort_dir = sort_dir if sort_dir in {"asc", "desc"} else "asc"
@@ -76,7 +104,33 @@ def build_dashboard_rows(
         return [f"-{field}" if descending else field for field in fields]
 
     if section == "farmers":
-        users = User.objects.all()
+        creation_date_query = (
+            AuditLog.objects.filter(
+                target_table="USERS",
+                target_id=OuterRef("user_id"),
+                action_type="CREATE",
+            )
+            .order_by("created_at")
+            .values("created_at")[:1]
+        )
+        users = (
+            User.objects.annotate(
+                dashboard_created_at=Subquery(creation_date_query)
+            )
+            .select_related("personal_address")
+            .prefetch_related(
+                Prefetch(
+                    "phone_numbers",
+                    queryset=PhoneNumber.objects.order_by("phone_id"),
+                ),
+                Prefetch(
+                    "farms",
+                    queryset=Farm.objects.select_related("address").order_by(
+                        "farm_id"
+                    ),
+                ),
+            )
+        )
         if sort_field == "verification":
             users = users.order_by(
                 *order_value(
@@ -117,20 +171,12 @@ def build_dashboard_rows(
                 | Q(farms__address__barangay__icontains=query)
             ).distinct()
 
+        users, page_obj = _paginate_queryset(users, page_number, page_size)
         rows = []
         for user in users:
-            phone = user.phone_numbers.first()
-            farm = user.farms.first()
+            phone = next(iter(user.phone_numbers.all()), None)
+            farm = next(iter(user.farms.all()), None)
             address = farm.address if farm and farm.address else None
-            documents = user.electronic_documents.all()[:4]
-            creation_date = (
-                AuditLog.objects.filter(
-                    target_table="USERS", target_id=user.user_id, action_type="CREATE"
-                )
-                .order_by("created_at")
-                .values_list("created_at", flat=True)
-                .first()
-            )
             rows.append(
                 {
                     "id": user.user_id,
@@ -140,7 +186,6 @@ def build_dashboard_rows(
                     ),
                     "phone": phone.mobile_number if phone else "-",
                     "farm_size": farm.farm_size_hectares if farm else "-",
-                    "verification_code": user.verification_code or "-",
                     "location": ", ".join(
                         part
                         for part in [
@@ -152,7 +197,6 @@ def build_dashboard_rows(
                         if part
                     )
                     or "-",
-                    "documents": documents,
                     "status_value": 1 if user.is_verified in (1, True, "1") else 0,
                     "status_label": "Verified"
                     if user.is_verified in (1, True, "1")
@@ -162,13 +206,24 @@ def build_dashboard_rows(
                         (1, "Verified"),
                         (2, "Rejected"),
                     ],
-                    "created_at": creation_date,
+                    "created_at": user.dashboard_created_at,
                 }
             )
-        return rows
+        return _page_result(rows, page_obj)
 
     if section == "logistics":
-        vehicles = Vehicle.objects.select_related("user")
+        creation_date_query = (
+            AuditLog.objects.filter(
+                target_table="VEHICLES",
+                target_id=OuterRef("vehicle_id"),
+                action_type="CREATE",
+            )
+            .order_by("created_at")
+            .values("created_at")[:1]
+        )
+        vehicles = Vehicle.objects.select_related("user").annotate(
+            dashboard_created_at=Subquery(creation_date_query)
+        )
         if sort_field == "status":
             vehicles = vehicles.order_by(
                 *order_value(
@@ -219,6 +274,7 @@ def build_dashboard_rows(
                 | Q(user__last_name__icontains=query)
             )
 
+        vehicles, page_obj = _paginate_queryset(vehicles, page_number, page_size)
         rows = []
         for vehicle in vehicles:
             owner = vehicle.user
@@ -230,16 +286,6 @@ def build_dashboard_rows(
                 )
                 if owner
                 else "Unassigned"
-            )
-            creation_date = (
-                AuditLog.objects.filter(
-                    target_table="VEHICLES",
-                    target_id=vehicle.vehicle_id,
-                    action_type="CREATE",
-                )
-                .order_by("created_at")
-                .values_list("created_at", flat=True)
-                .first()
             )
             status_value = int(vehicle.current_health_status or 0)
             rows.append(
@@ -262,13 +308,24 @@ def build_dashboard_rows(
                         (2, "Maintenance"),
                         (3, "Disabled"),
                     ],
-                    "created_at": creation_date,
+                    "created_at": vehicle.dashboard_created_at,
                 }
             )
-        return rows
+        return _page_result(rows, page_obj)
 
     if section == "businesses":
-        bulk_buyers = BulkBuyer.objects.select_related("user")
+        creation_date_query = (
+            AuditLog.objects.filter(
+                target_table__in=["BULK_BUYERS", "BUSINESSES"],
+                target_id=OuterRef("business_id"),
+                action_type="CREATE",
+            )
+            .order_by("created_at")
+            .values("created_at")[:1]
+        )
+        bulk_buyers = BulkBuyer.objects.select_related("user").annotate(
+            dashboard_created_at=Subquery(creation_date_query)
+        )
         if sort_field == "status":
             bulk_buyers = bulk_buyers.order_by(
                 *order_value("is_verified", "business_name", "user__last_name")
@@ -297,19 +354,14 @@ def build_dashboard_rows(
                 | Q(user__last_name__icontains=query)
             )
 
+        bulk_buyers, page_obj = _paginate_queryset(
+            bulk_buyers, page_number, page_size
+        )
         rows = []
         for bulk_buyer in bulk_buyers:
             owner = bulk_buyer.user
             creation_date = (
-                bulk_buyer.date_time_created
-                or AuditLog.objects.filter(
-                    target_table__in=["BULK_BUYERS", "BUSINESSES"],
-                    target_id=bulk_buyer.business_id,
-                    action_type="CREATE",
-                )
-                .order_by("created_at")
-                .values_list("created_at", flat=True)
-                .first()
+                bulk_buyer.date_time_created or bulk_buyer.dashboard_created_at
             )
             rows.append(
                 {
@@ -338,9 +390,9 @@ def build_dashboard_rows(
                     "created_at": creation_date,
                 }
             )
-        return rows
+        return _page_result(rows, page_obj)
 
-    audit_logs = AuditLog.objects.select_related("user")
+    audit_logs = AuditLog.objects.select_related("user", "staff_user")
     if sort_field == "action":
         audit_logs = audit_logs.order_by(*order_value("action_type", "created_at"))
     elif sort_field == "user":
@@ -357,17 +409,22 @@ def build_dashboard_rows(
             | Q(user__last_name__icontains=query)
         )
 
-    return [
+    audit_logs, page_obj = _paginate_queryset(audit_logs, page_number, page_size)
+    rows = [
         {
             "id": log.log_id,
             "entity": log,
-            "name": format_person_name(
-                getattr(log.user, "first_name", None),
-                getattr(log.user, "middle_name", None),
-                getattr(log.user, "last_name", None),
-            )
-            if log.user
-            else "System",
+            "name": (
+                log.staff_user.get_username()
+                if log.staff_user
+                else format_person_name(
+                    getattr(log.user, "first_name", None),
+                    getattr(log.user, "middle_name", None),
+                    getattr(log.user, "last_name", None),
+                )
+                if log.user
+                else "System"
+            ),
             "action": log.action_type or "-",
             "target": log.target_table or "-",
             "status_label": "Recorded",
@@ -377,3 +434,4 @@ def build_dashboard_rows(
         }
         for log in audit_logs
     ]
+    return _page_result(rows, page_obj)

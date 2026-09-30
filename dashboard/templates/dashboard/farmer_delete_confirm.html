@@ -1,16 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Delete User</title>
+{% extends "dashboard/base.html" %}
+{% block title %}Delete Farmer | FTH Dashboard{% endblock %}
+{% block extra_head %}
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f7fb;
-            margin: 0;
-            padding: 32px;
-        }
         .card {
             max-width: 600px;
             margin: 0 auto;
@@ -40,10 +31,16 @@
             margin-top: 20px;
         }
     </style>
-</head>
-<body>
+{% endblock %}
+{% block page_title %}Delete Farmer{% endblock %}
+{% block header_actions %}
+    <a class="button" href="{% url 'farmers:dashboard' %}">Back to Farmers</a>
+{% endblock %}
+{% block content %}
+    {% if db_error %}
+        <div class="messages error">{{ db_error }}</div>
+    {% else %}
     <div class="card">
-        <h2>Delete User</h2>
         <p>Are you sure you want to delete <strong>{{ user.first_name }} {{ user.last_name }}</strong>?</p>
 
         <form method="post">
@@ -54,5 +51,5 @@
             </div>
         </form>
     </div>
-</body>
-</html>
+    {% endif %}
+{% endblock %}

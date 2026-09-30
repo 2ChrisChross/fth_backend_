@@ -1,0 +1,183 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{% if farmer %}Farmer {{ farmer.username }}{% else %}Farmer Information{% endif %} | FTH Dashboard{% endblock %}
+{% block extra_head %}
+    <style>
+        .detail-panel { min-height: 70vh; padding: 20px; background: white; }
+        .tabs { display: flex; gap: 6px; border-bottom: 1px solid #d7dfe9; margin-bottom: 20px; }
+        .tab { padding: 11px 15px; color: #42536b; text-decoration: none; border-bottom: 3px solid transparent; }
+        .tab.active { color: #1d4fbf; border-color: #1d4fbf; font-weight: 700; }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0 24px; }
+        .info-item { padding: 14px 0; border-bottom: 1px solid #e5e9ef; }
+        .info-label { display: block; margin-bottom: 5px; color: #667085; font-size: 13px; }
+        .info-value { overflow-wrap: anywhere; font-weight: 600; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+        .actions form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .actions input { padding: 9px 10px; }
+        .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 16px 0; }
+        .filters label { display: grid; gap: 5px; color: #42536b; font-size: 13px; }
+        input, select, button { padding: 9px 10px; border: 1px solid #c7d0dc; background: white; color: #183153; font: inherit; }
+        button { cursor: pointer; }
+        .farm-scroll { max-height: 520px; overflow: auto; border: 1px solid #d7dfe9; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; border-bottom: 1px solid #e5e9ef; text-align: left; vertical-align: top; }
+        th { position: sticky; top: 0; background: #eef4ff; z-index: 1; }
+        .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 16px; }
+        .empty { padding: 30px; text-align: center; color: #667085; }
+        .request-list { padding-left: 20px; }
+        @media (max-width: 760px) {
+            .detail-panel { padding: 14px; }
+            .farm-scroll { max-height: 60vh; }
+            .farm-scroll table { min-width: 760px; }
+        }
+    </style>
+{% endblock %}
+{% block page_title %}{% if farmer %}Information on Farmer {{ farmer.username|default:farmer.user_id }}{% else %}Farmer Information{% endif %}{% endblock %}
+{% block header_actions %}
+    <a class="button" href="{% url 'farmers:dashboard' %}">Go back to Dashboard</a>
+    {% if can_manage_records %}
+        <a class="button" href="{% url 'farmers:edit' farmer.user_id %}">Edit Farmer</a>
+    {% endif %}
+{% endblock %}
+{% block content %}
+    {% if db_error %}
+        <div class="messages error">{{ db_error }}</div>
+    {% else %}
+        <section class="detail-panel">
+            <nav class="tabs" aria-label="Farmer views">
+                <a class="tab {% if active_view == 'information' %}active{% endif %}" href="?view=information">Farmer Information</a>
+                <a class="tab {% if active_view == 'farms' %}active{% endif %}" href="?view=farms">Farms <span>({{ farm_count }})</span></a>
+            </nav>
+
+            {% if active_view == 'information' %}
+                <section aria-label="Farmer information">
+                    <div class="info-grid">
+                        <div class="info-item"><span class="info-label">Username</span><span class="info-value">{{ farmer.username|default:"-" }}</span></div>
+                        <div class="info-item"><span class="info-label">Full Name</span><span class="info-value">{{ farmer.first_name }} {{ farmer.middle_name }} {{ farmer.last_name }}</span></div>
+                        <div class="info-item"><span class="info-label">Phone</span><span class="info-value">{{ phone.mobile_number|default:"-" }}</span></div>
+                        <div class="info-item"><span class="info-label">Account Status</span><span class="info-value">{% if farmer.is_verified == 1 %}Verified{% elif farmer.is_verified == 2 %}Rejected{% else %}Pending Verification{% endif %}</span></div>
+                        <div class="info-item"><span class="info-label">Date of Birth</span><span class="info-value">{{ farmer.date_of_birth|default:"-" }}</span></div>
+                        <div class="info-item"><span class="info-label">Farm Count</span><span class="info-value">{{ farm_count }}</span></div>
+                        <div class="info-item"><span class="info-label">Preferred Language</span><span class="info-value">{{ farmer.preferred_language|default:"-" }}</span></div>
+                        <div class="info-item"><span class="info-label">Preferred Payment Method</span><span class="info-value">{{ farmer.preferred_payment_method|default:"-" }}</span></div>
+                        <div class="info-item"><span class="info-label">Personal Address</span><span class="info-value">{% if personal_address %}{{ personal_address.street_address }}, {{ personal_address.barangay }}, {{ personal_address.municipality_city }}, {{ personal_address.province }} {{ personal_address.postal_code }}{% else %}-{% endif %}</span></div>
+                    </div>
+
+                    {% if can_view_applications %}
+                        <h2>Registration Documents</h2>
+                        <ul class="request-list">
+                            {% for document in documents %}
+                                <li><a href="{{ document.file_url }}" target="_blank" rel="noopener">{{ document.doc_title|default:"Registration document" }}</a></li>
+                            {% empty %}
+                                <li>No registration documents.</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+
+                    <div class="actions">
+                        {% if can_manage_records %}
+                            <a class="button" href="{% url 'farmers:edit' farmer.user_id %}">Edit Information</a>
+                            <a class="button" href="{% url 'farmers:delete' farmer.user_id %}">Delete Farmer</a>
+                        {% endif %}
+                        {% if can_view_code_requests %}
+                            <a class="button" href="{% url 'dashboard_code_requests' %}?farmer_id={{ farmer.user_id }}">View Code Requests</a>
+                        {% endif %}
+                        {% if can_manually_verify and farmer.is_verified != 1 %}
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="manual_verify">
+                                <label for="manual-verify-reason">Manual verification reason</label>
+                                <input id="manual-verify-reason" name="reason" required>
+                                <button type="submit">Manually Verify</button>
+                            </form>
+                        {% endif %}
+                    </div>
+
+                    <h2>Recent Verification Requests</h2>
+                    <ul class="request-list">
+                        {% for code_request in code_requests %}
+                            <li>
+                                {{ code_request.get_purpose_display }}: {{ code_request.get_status_display }}
+                                {% if code_request.requested_at %}({{ code_request.requested_at|date:"Y-m-d" }}){% endif %}
+                                {% if can_view_code_requests %}
+                                    <a href="{% url 'dashboard_code_requests' %}?farmer_id={{ farmer.user_id }}">Open queue</a>
+                                {% endif %}
+                            </li>
+                        {% empty %}
+                            <li>No code requests.</li>
+                        {% endfor %}
+                    </ul>
+                </section>
+            {% else %}
+                <form class="filters" method="get">
+                    <input type="hidden" name="view" value="farms">
+                    <label for="farm-search">Search address
+                        <input id="farm-search" name="farm_search" value="{{ farm_search }}" placeholder="Barangay, municipality, province">
+                    </label>
+                    <label for="farm-status">Farm status
+                        <select id="farm-status" name="farm_status">
+                            <option value="active" {% if farm_status == 'active' %}selected{% endif %}>Active</option>
+                            <option value="archived" {% if farm_status == 'archived' %}selected{% endif %}>Archived</option>
+                            <option value="all" {% if farm_status == 'all' %}selected{% endif %}>All</option>
+                        </select>
+                    </label>
+                    <label for="farm-size">Farm size
+                        <select id="farm-size" name="farm_size">
+                            <option value="all" {% if farm_size_filter == 'all' %}selected{% endif %}>Any size</option>
+                            <option value="under_1" {% if farm_size_filter == 'under_1' %}selected{% endif %}>Under 1 ha</option>
+                            <option value="1_to_10" {% if farm_size_filter == '1_to_10' %}selected{% endif %}>1 to under 10 ha</option>
+                            <option value="10_plus" {% if farm_size_filter == '10_plus' %}selected{% endif %}>10 ha or more</option>
+                        </select>
+                    </label>
+                    <label for="farm-sort">Sort
+                        <select id="farm-sort" name="farm_sort">
+                            <option value="newest" {% if farm_sort == 'newest' %}selected{% endif %}>Newest</option>
+                            <option value="size_desc" {% if farm_sort == 'size_desc' %}selected{% endif %}>Largest first</option>
+                            <option value="size_asc" {% if farm_sort == 'size_asc' %}selected{% endif %}>Smallest first</option>
+                        </select>
+                    </label>
+                    <button type="submit">Apply Filters</button>
+                </form>
+
+                {% if farms %}
+                    <div class="farm-scroll" tabindex="0" aria-label="Scrollable list of farms">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Farm ID</th>
+                                    <th>Size</th>
+                                    <th>Address</th>
+                                    <th>Active Crops</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for farm in farms %}
+                                    <tr>
+                                        <td>{{ farm.farm_id }}</td>
+                                        <td>{{ farm.farm_size_hectares|default:"-" }} ha</td>
+                                        <td>{% if farm.address %}{{ farm.address.street_address }}, {{ farm.address.barangay }}, {{ farm.address.municipality_city }}, {{ farm.address.province }} {{ farm.address.postal_code }}, {{ farm.address.country }}{% if farm.address.gps_coordinates %} ({{ farm.address.gps_coordinates }}){% endif %}{% else %}-{% endif %}</td>
+                                        <td>{{ farm.active_crop_count }}</td>
+                                        <td>{% if farm.deleted_at %}Archived{% else %}Active{% endif %}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if page_obj.paginator.num_pages > 1 %}
+                        <nav class="pagination" aria-label="Farm pagination">
+                            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                            {% if page_obj.has_previous %}
+                                <a href="?view=farms&farm_search={{ farm_search|urlencode }}&farm_status={{ farm_status }}&farm_size={{ farm_size_filter }}&farm_sort={{ farm_sort }}&page={{ page_obj.previous_page_number }}">Previous</a>
+                            {% endif %}
+                            {% if page_obj.has_next %}
+                                <a href="?view=farms&farm_search={{ farm_search|urlencode }}&farm_status={{ farm_status }}&farm_size={{ farm_size_filter }}&farm_sort={{ farm_sort }}&page={{ page_obj.next_page_number }}">Next</a>
+                            {% endif %}
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="empty">No farms match these filters.</div>
+                {% endif %}
+            {% endif %}
+        </section>
+    {% endif %}
+{% endblock %}

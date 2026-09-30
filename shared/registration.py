@@ -1,6 +1,7 @@
 from urllib.parse import urlsplit
 
 from django.db import connection
+from django.db.transaction import atomic
 
 from .models import Address, ElectronicDocument, EnumeratedValue
 
@@ -16,22 +17,24 @@ def resolve_enum_order_id(enum_type, raw_value):
     if value.isdigit():
         return int(value)
 
-    with connection.cursor() as cursor:
-        for column in ("order_id", "ordering"):
-            try:
-                cursor.execute(
-                    (
-                        f'SELECT {column} FROM "enumerated_values" '
-                        f"WHERE LOWER(type) = LOWER(%s) "
-                        f"AND LOWER(value) = LOWER(%s) LIMIT 1"
-                    ),
-                    [str(enum_type), value],
-                )
-                row = cursor.fetchone()
+    table_name = connection.ops.quote_name(EnumeratedValue._meta.db_table)
+    for column in ("order_id", "ordering"):
+        try:
+            with atomic(using=connection.alias):
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        (
+                            f"SELECT {column} FROM {table_name} "
+                            f"WHERE LOWER(type) = LOWER(%s) "
+                            f"AND LOWER(value) = LOWER(%s) LIMIT 1"
+                        ),
+                        [str(enum_type), value],
+                    )
+                    row = cursor.fetchone()
                 if row:
                     return row[0]
-            except Exception:
-                continue
+        except Exception:
+            continue
 
     try:
         enum = EnumeratedValue.objects.filter(

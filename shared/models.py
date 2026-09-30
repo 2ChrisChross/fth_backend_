@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -61,11 +62,21 @@ class User(models.Model):
     total_earnings = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True
     )
-    verification_code = models.CharField(max_length=8, null=True, blank=True)
+    verification_code = models.CharField(max_length=128, null=True, blank=True)
+    verification_code_purpose = models.CharField(max_length=20, null=True, blank=True)
+    verification_code_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         managed = True
         db_table = "USERS"
+
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
 
 
 class PhoneNumber(models.Model):
@@ -149,6 +160,13 @@ class AuditLog(models.Model):
         null=True,
         blank=True,
         related_name="audit_logs",
+    )
+    staff_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="staff_audit_logs",
     )
     action_type = models.CharField(max_length=255, null=True, blank=True)
     target_table = models.CharField(max_length=255, null=True, blank=True)

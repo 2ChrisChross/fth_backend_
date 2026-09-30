@@ -1,16 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if section == 'businesses' %}Add Bulk Buyer{% else %}Add Vehicle{% endif %}</title>
+{% extends "dashboard/base.html" %}
+{% block title %}{% if section == 'businesses' %}Add Bulk Buyer{% else %}Add Vehicle{% endif %} | FTH Dashboard{% endblock %}
+{% block extra_head %}
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f7fb;
-            margin: 0;
-            padding: 24px;
-        }
         .card {
             max-width: 720px;
             margin: 0 auto;
@@ -18,9 +9,6 @@
             border-radius: 12px;
             padding: 24px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-        h1 {
-            margin-bottom: 16px;
         }
         .grid {
             display: grid;
@@ -66,11 +54,16 @@
             margin: 0 0 16px;
         }
     </style>
-</head>
-<body>
+{% endblock %}
+{% block page_title %}{% if section == 'businesses' %}Add Bulk Buyer{% else %}Add Vehicle{% endif %}{% endblock %}
+{% block header_actions %}
+    <a class="button" href="{{ dashboard_url }}">Back to list</a>
+{% endblock %}
+{% block content %}
+    {% if db_error %}
+        <div class="error">{{ db_error }}</div>
+    {% else %}
     <div class="card">
-        <h1>{% if section == 'businesses' %}Add Bulk Buyer{% else %}Add Vehicle{% endif %}</h1>
-
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
@@ -144,5 +137,5 @@
             </div>
         </form>
     </div>
-</body>
-</html>
+    {% endif %}
+{% endblock %}

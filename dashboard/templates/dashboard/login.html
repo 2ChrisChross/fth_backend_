@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard sign in</title>
+</head>
+<body>
+    <main>
+        <h1>Dashboard sign in</h1>
+        {% if form.non_field_errors %}
+            <div role="alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+            <div>
+                <label for="id_username">Username</label>
+                {{ form.username }}
+                {{ form.username.errors }}
+            </div>
+            <div>
+                <label for="id_password">Password</label>
+                {{ form.password }}
+                {{ form.password.errors }}
+            </div>
+            <button type="submit">Sign in</button>
+        </form>
+    </main>
+</body>
+</html>

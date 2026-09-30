@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}FTH Dashboard{% endblock %}</title>
+    <style>
+        body { margin: 0; background: #f4f7fb; color: #222; font-family: Arial, sans-serif; }
+        .dashboard-shell { display: flex; min-height: 100vh; }
+        .sidebar { box-sizing: border-box; flex: 0 0 240px; padding: 24px 18px; background: #12233d; color: #fff; }
+        .brand { margin: 0 0 26px; font-size: 1.5rem; font-weight: 700; }
+        .nav-section { display: grid; gap: 8px; }
+        .nav-link { display: block; padding: 11px 12px; color: #dfeafc; text-decoration: none; }
+        .nav-link.active { background: #1d4fbf; color: #fff; }
+        .main { min-width: 0; flex: 1; padding: 28px; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
+        .title { margin: 0; font-size: 1.8rem; }
+        .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .button, button { display: inline-block; padding: 9px 12px; border: 1px solid #c7d0dc; background: #fff; color: #183153; font: inherit; text-decoration: none; cursor: pointer; }
+        .messages { margin: 12px 0; padding: 12px; background: #fff; border-left: 4px solid #238636; }
+        .messages.error { border-color: #cf222e; }
+        .messages.warning { border-color: #bf8700; }
+        @media (max-width: 760px) {
+            .dashboard-shell { display: block; }
+            .sidebar { width: auto; }
+            .nav-section { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+            .main { padding: 16px; }
+            .topbar { align-items: flex-start; flex-direction: column; }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="dashboard-shell">
+    <aside class="sidebar">
+        <div class="brand">FTH</div>
+        <nav class="nav-section" aria-label="Admin dashboard">
+            {% for item in sections %}
+                {% if item.key == 'reports' %}
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_reports' %}">{{ item.label }}</a>
+                {% elif item.key == 'farmers' %}
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'farmers:dashboard' %}">{{ item.label }}</a>
+                {% elif item.key == 'code_requests' %}
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_code_requests' %}">{{ item.label }}</a>
+                {% elif item.key == 'logistics' %}
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'logistics:dashboard' %}">{{ item.label }}</a>
+                {% elif item.key == 'businesses' %}
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'businesses:dashboard' %}">{{ item.label }}</a>
+                {% elif item.key == 'audit_logs' %}
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_audit_logs' %}">{{ item.label }}</a>
+                {% endif %}
+            {% endfor %}
+        </nav>
+    </aside>
+    <main class="main">
+        <header class="topbar">
+            <h1 class="title">{% block page_title %}Dashboard{% endblock %}</h1>
+            <div class="header-actions">
+                {% block header_actions %}{% endblock %}
+                <form method="post" action="{% url 'dashboard_logout' %}">
+                    {% csrf_token %}
+                    <button type="submit">Sign out</button>
+                </form>
+            </div>
+        </header>
+        {% if messages %}
+            {% for message in messages %}
+                <div class="messages {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>

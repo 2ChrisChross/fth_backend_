@@ -1,6 +1,116 @@
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.auth.hashers import make_password
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings
+
+from shared.models import User
+
+from .tokens import FarmerRefreshToken
+
+
+class FarmerProfileSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField(read_only=True)
+    username = serializers.CharField(max_length=150, required=False)
+    first_name = serializers.CharField(max_length=255, required=False)
+    middle_name = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, allow_null=True
+    )
+    last_name = serializers.CharField(max_length=255, required=False)
+    phone_number = serializers.SerializerMethodField()
+    farm = serializers.SerializerMethodField()
+    new_password = serializers.CharField(
+        write_only=True, required=False, trim_whitespace=False
+    )
+
+    def get_phone_number(self, user):
+        phone = user.phone_numbers.order_by("phone_id").first()
+        return phone.mobile_number if phone else None
+
+    def get_farm(self, user):
+        farm = user.farms.filter(deleted_at__isnull=True).order_by("farm_id").first()
+        if farm is None:
+            return None
+        address = farm.address
+        return {
+            "farm_id": farm.farm_id,
+            "farm_size_hectares": farm.farm_size_hectares,
+            "address": (
+                {
+                    "street_address": address.street_address,
+                    "barangay": address.barangay,
+                    "municipality_city": address.municipality_city,
+                    "province": address.province,
+                    "postal_code": address.postal_code,
+                    "country": address.country,
+                    "gps_coordinates": address.gps_coordinates,
+                }
+                if address
+                else None
+            ),
+        }
+
+    def validate_username(self, value):
+        if (
+            User.objects.filter(username=value)
+            .exclude(user_id=self.instance.user_id)
+            .exists()
+        ):
+            raise serializers.ValidationError("This username is already in use.")
+        return value
+
+    def validate_new_password(self, value):
+        validate_password(value, user=self.instance)
+        return value
+
+    def update(self, instance, validated_data):
+        new_password = validated_data.pop("new_password", None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        update_fields = list(validated_data)
+        if new_password:
+            instance.password_hash = make_password(new_password)
+            update_fields.append("password_hash")
+        if update_fields:
+            instance.save(update_fields=update_fields)
+        return instance
+
+
+class FarmerLoginSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    password = serializers.CharField(write_only=True)
+
+
+class FarmerCodeRequestSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=255)
+    first_name = serializers.CharField(max_length=255)
+    last_name = serializers.CharField(max_length=255)
+    purpose = serializers.ChoiceField(choices=("verification", "recovery"))
+
+
+class FarmerCodeRecoverySerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=255)
+    verification_code = serializers.CharField(max_length=8, write_only=True)
+
+
+class FarmerTokenRefreshSerializer(TokenRefreshSerializer):
+    token_class = FarmerRefreshToken
+
+    def validate(self, attrs):
+        from .authentication import get_active_farmer
+
+        try:
+            refresh = self.token_class(attrs["refresh"])
+            user_id = refresh[api_settings.USER_ID_CLAIM]
+        except (KeyError, TokenError, TypeError) as exc:
+            raise InvalidToken("Token is invalid.") from exc
+
+        if get_active_farmer(user_id) is None:
+            raise InvalidToken("Token is not for an active farmer account.")
+        return super().validate(attrs)
 
 
 class FarmerRegistrationSerializer(serializers.Serializer):

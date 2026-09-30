@@ -52,3 +52,38 @@ def _log_audit_change(
         )
     except Exception:
         pass
+
+
+def log_staff_audit_change(
+    staff_user,
+    user,
+    action_type,
+    target_table,
+    target_id,
+    old_values=None,
+    new_values=None,
+    request=None,
+):
+    ip_address = ""
+    if request is not None:
+        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+        if forwarded_for:
+            ip_address = forwarded_for.split(",")[0].strip()
+        else:
+            ip_address = request.META.get("REMOTE_ADDR", "")
+
+    return AuditLog.objects.create(
+        user=user,
+        staff_user=staff_user,
+        action_type=action_type,
+        target_table=target_table,
+        target_id=target_id,
+        old_values=json.dumps(old_values, default=str)
+        if old_values is not None
+        else None,
+        new_values=json.dumps(new_values, default=str)
+        if new_values is not None
+        else None,
+        ip_address=ip_address,
+        created_at=timezone.now(),
+    )

@@ -1,0 +1,119 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Farmer Code Requests | FTH Dashboard{% endblock %}
+{% block extra_head %}
+    <style>
+        .toolbar { justify-content: flex-start; margin: 18px 0; }
+        .alert { border-color: #bf8700; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 12px; border-bottom: 1px solid #e5e9ef; text-align: left; vertical-align: top; }
+        th { background: #eef4ff; }
+        input, select, button { padding: 8px 10px; font: inherit; }
+        button { border: 1px solid #c7d0dc; background: white; color: #183153; cursor: pointer; }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 220px; }
+        .actions form { display: flex; flex-wrap: wrap; gap: 6px; }
+        .muted { color: #667085; }
+        .pagination { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+        @media (max-width: 760px) {
+            .table-wrap { overflow-x: auto; }
+            table { min-width: 850px; }
+        }
+    </style>
+{% endblock %}
+{% block page_title %}Farmer Code Requests{% endblock %}
+{% block content %}
+        {% if farmer_id %}
+            <p>Requests for farmer #{{ farmer_id }} <a href="{% url 'dashboard_code_requests' %}">Clear</a></p>
+        {% endif %}
+        {% if issued_code %}
+            <div class="messages warning" role="alert">
+                <strong>Mail this one-time code:</strong> {{ issued_code.code }}
+                <span>Expires {{ issued_code.expires_at }}.</span>
+            </div>
+        {% endif %}
+        {% if db_error %}<div class="alert">{{ db_error }}</div>{% endif %}
+        {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+        {% if not db_error %}
+            <form class="toolbar" method="get">
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All</option>
+                    {% for value, label in statuses %}
+                        <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Filter</button>
+            </form>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Requested</th>
+                            <th>Farmer</th>
+                            <th>Phone</th>
+                            <th>Purpose</th>
+                            <th>Status</th>
+                            <th>Code expiry</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in code_requests %}
+                            <tr>
+                                <td>{{ item.requested_at|date:"Y-m-d H:i" }}</td>
+                                <td>
+                                    {% if can_review %}
+                                        <a href="{% url 'dashboard_code_request_detail' item.request_id %}">{{ item.user.first_name }} {{ item.user.last_name }}</a>
+                                    {% else %}
+                                        {{ item.user.first_name }} {{ item.user.last_name }}
+                                    {% endif %}
+                                </td>
+                                <td>{{ item.phone_number|default:"-" }}</td>
+                                <td>{{ item.get_purpose_display }}</td>
+                                <td>{{ item.get_status_display }}</td>
+                                <td>{{ item.code_expires_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                                <td class="actions">
+                                    {% if item.status == 'pending_review' and can_review %}
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="request_id" value="{{ item.request_id }}">
+                                            <input type="text" name="reason" placeholder="Rejection reason">
+                                            <button name="action" value="approve" type="submit">Approve</button>
+                                            <button name="action" value="reject" type="submit">Reject</button>
+                                        </form>
+                                    {% elif item.status == 'approved' and can_issue %}
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="request_id" value="{{ item.request_id }}">
+                                            <button name="action" value="issue" type="submit">Issue code</button>
+                                        </form>
+                                    {% elif item.status == 'code_issued' and can_issue %}
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="request_id" value="{{ item.request_id }}">
+                                            <button name="action" value="mark_mailed" type="submit">Mark mailed</button>
+                                        </form>
+                                    {% else %}
+                                        <span class="muted">No action</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="7">No code requests found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if page_obj and page_obj.paginator.num_pages > 1 %}
+                <nav class="pagination" aria-label="Pagination">
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    {% if page_obj.has_previous %}
+                        <a href="?status={{ selected_status|urlencode }}&farmer_id={{ farmer_id|urlencode }}&page={{ page_obj.previous_page_number }}">Previous</a>
+                    {% endif %}
+                    {% if page_obj.has_next %}
+                        <a href="?status={{ selected_status|urlencode }}&farmer_id={{ farmer_id|urlencode }}&page={{ page_obj.next_page_number }}">Next</a>
+                    {% endif %}
+                </nav>
+            {% endif %}
+        {% endif %}
+    </main>
+{% endblock %}

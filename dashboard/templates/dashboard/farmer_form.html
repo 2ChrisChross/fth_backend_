@@ -1,16 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if user %}Edit User{% else %}Create User{% endif %}</title>
+{% extends "dashboard/base.html" %}
+{% block title %}{% if registration_mode %}Register Farmer{% else %}Edit Farmer{% endif %} | FTH Dashboard{% endblock %}
+{% block extra_head %}
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f7fb;
-            margin: 0;
-            padding: 24px;
-        }
         .card {
             max-width: 900px;
             margin: 0 auto;
@@ -18,9 +9,6 @@
             padding: 24px;
             border-radius: 12px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-        h1 {
-            margin-top: 0;
         }
         .grid {
             display: grid;
@@ -31,6 +19,36 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+        }
+        .registration-section {
+            margin: 0 0 24px;
+            padding: 18px;
+            border: 1px solid #d7dfe9;
+        }
+        .registration-section legend {
+            padding: 0 8px;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+        .registration-section .grid + .grid { margin-top: 16px; }
+        select {
+            padding: 10px 12px;
+            border: 1px solid #d7dfe9;
+            border-radius: 8px;
+            background: white;
+            font-size: 14px;
+        }
+        .document-row {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .validation-errors {
+            margin: 0 0 20px;
+            padding: 12px 12px 12px 32px;
+            background: #fff5f5;
+            color: #b42318;
         }
         label {
             font-weight: 600;
@@ -65,12 +83,131 @@
             color: #b42318;
             margin-bottom: 16px;
         }
+        @media (max-width: 640px) {
+            .card { padding: 16px; }
+            .registration-section { padding: 12px; }
+            .document-row { grid-template-columns: 1fr; }
+        }
     </style>
-</head>
-<body>
+{% endblock %}
+{% block page_title %}{% if registration_mode %}Register Farmer{% else %}Edit Farmer{% endif %}{% endblock %}
+{% block header_actions %}
+    <a class="button" href="{% url 'farmers:dashboard' %}">Back to Farmers</a>
+{% endblock %}
+{% block content %}
+    {% if db_error %}
+        <div class="error">{{ db_error }}</div>
+    {% else %}
     <div class="card">
-        <h1>{% if user %}Edit User{% else %}Create User{% endif %}</h1>
+        {% if registration_mode %}
+            <p>Enter the same information required during farmer registration. Document files must already be uploaded; provide their URLs below.</p>
+            {% if registration_errors %}
+                <ul class="validation-errors" role="alert">
+                    {% for field, errors in registration_errors.items %}
+                        {% for message in errors %}
+                            <li>{{ field }}: {{ message }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="role" value="Farmer">
 
+                <fieldset class="registration-section">
+                    <legend>Account and personal details</legend>
+                    <div class="grid">
+                        <div class="field">
+                            <label for="phonenumber">Phone Number</label>
+                            <input id="phonenumber" name="phonenumber" type="tel" autocomplete="tel" value="{{ registration_values.phonenumber|default:'' }}" required>
+                        </div>
+                        <div class="field">
+                            <label for="username">Username</label>
+                            <input id="username" name="username" autocomplete="username" value="{{ registration_values.username|default:'' }}" required>
+                        </div>
+                        <div class="field">
+                            <label for="password">Initial Password</label>
+                            <input id="password" name="password" type="password" autocomplete="new-password" required>
+                        </div>
+                        <div class="field">
+                            <label for="firstname">First Name</label>
+                            <input id="firstname" name="firstname" value="{{ registration_values.firstname|default:'' }}" required>
+                        </div>
+                        <div class="field">
+                            <label for="middle_name">Middle Name</label>
+                            <input id="middle_name" name="middle_name" value="{{ registration_values.middle_name|default:'' }}">
+                        </div>
+                        <div class="field">
+                            <label for="lastname">Last Name</label>
+                            <input id="lastname" name="lastname" value="{{ registration_values.lastname|default:'' }}" required>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="registration-section">
+                    <legend>Personal Address</legend>
+                    <div class="grid">
+                        <div class="field"><label for="region">Region</label><input id="region" name="region" value="{{ registration_values.region|default:'' }}" required></div>
+                        <div class="field"><label for="province">Province</label><input id="province" name="province" value="{{ registration_values.province|default:'' }}" required></div>
+                        <div class="field"><label for="municipality">Municipality</label><input id="municipality" name="municipality" value="{{ registration_values.municipality|default:'' }}" required></div>
+                        <div class="field"><label for="baranggay">Barangay</label><input id="baranggay" name="baranggay" value="{{ registration_values.baranggay|default:'' }}" required></div>
+                        <div class="field"><label for="house_number">House Number</label><input id="house_number" name="house_number" value="{{ registration_values.house_number|default:'' }}" required></div>
+                        <div class="field"><label for="street">Street</label><input id="street" name="street" value="{{ registration_values.street|default:'' }}" required></div>
+                        <div class="field"><label for="postal_code">Postal Code</label><input id="postal_code" name="postal_code" value="{{ registration_values.postal_code|default:'' }}" required></div>
+                        <div class="field"><label for="country">Country</label><input id="country" name="country" value="{{ registration_values.country|default:'Philippines' }}"></div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="registration-section">
+                    <legend>Farm Details</legend>
+                    <div class="grid">
+                        <div class="field"><label for="farm_size">Farm Size (hectares)</label><input id="farm_size" name="farm_size" type="number" min="0" step="0.01" value="{{ registration_values.farm_size|default:'' }}" required></div>
+                        <div class="field"><label for="farm_region">Farm Region</label><input id="farm_region" name="farm_region" value="{{ registration_values.farm_region|default:'' }}" required></div>
+                        <div class="field"><label for="farm_province">Farm Province</label><input id="farm_province" name="farm_province" value="{{ registration_values.farm_province|default:'' }}" required></div>
+                        <div class="field"><label for="farm_municipality">Farm Municipality</label><input id="farm_municipality" name="farm_municipality" value="{{ registration_values.farm_municipality|default:'' }}" required></div>
+                        <div class="field"><label for="farm_barangay">Farm Barangay</label><input id="farm_barangay" name="farm_barangay" value="{{ registration_values.farm_barangay|default:'' }}" required></div>
+                        <div class="field"><label for="farm_house_number">Farm House Number</label><input id="farm_house_number" name="farm_house_number" value="{{ registration_values.farm_house_number|default:'' }}" required></div>
+                        <div class="field"><label for="farm_street">Farm Street</label><input id="farm_street" name="farm_street" value="{{ registration_values.farm_street|default:'' }}" required></div>
+                        <div class="field"><label for="farm_postal_code">Farm Postal Code</label><input id="farm_postal_code" name="farm_postal_code" value="{{ registration_values.farm_postal_code|default:'' }}" required></div>
+                        <div class="field"><label for="farm_country">Farm Country</label><input id="farm_country" name="farm_country" value="{{ registration_values.farm_country|default:'Philippines' }}"></div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="registration-section">
+                    <legend>Registration Documents</legend>
+                    {% for document in registration_documents %}
+                        <div class="document-row">
+                            <div class="field">
+                                <label for="document_{{ forloop.counter }}">Document {{ forloop.counter }} URL</label>
+                                <input id="document_{{ forloop.counter }}" name="document_{{ forloop.counter }}" type="url" value="{{ document.url }}" required>
+                            </div>
+                            <div class="field">
+                                <label for="document_type_{{ forloop.counter }}">Document Type</label>
+                                <select id="document_type_{{ forloop.counter }}" name="document_type_{{ forloop.counter }}" required>
+                                    <option value="Utility Bills" {% if document.type == 'Utility Bills' %}selected{% endif %}>Utility Bills</option>
+                                    <option value="Valid_ID" {% if document.type == 'Valid_ID' %}selected{% endif %}>Valid ID</option>
+                                    <option value="Owner_Address" {% if document.type == 'Owner_Address' %}selected{% endif %}>Owner Address</option>
+                                    <option value="Farm_Ownership" {% if document.type == 'Farm_Ownership' %}selected{% endif %}>Farm Ownership</option>
+                                </select>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </fieldset>
+
+                <fieldset class="registration-section">
+                    <legend>Optional Preferences</legend>
+                    <div class="grid">
+                        <div class="field"><label for="language">Preferred Language</label><input id="language" name="language" value="{{ registration_values.language|default:'' }}"></div>
+                        <div class="field"><label for="payment_method">Preferred Payment Method</label><input id="payment_method" name="payment_method" value="{{ registration_values.payment_method|default:'' }}"></div>
+                    </div>
+                </fieldset>
+
+                <div class="actions">
+                    <button class="btn btn-primary" type="submit">Create Farmer</button>
+                    <a class="btn" href="{% url 'farmers:dashboard' %}">Cancel</a>
+                </div>
+            </form>
+        {% else %}
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
@@ -129,6 +266,7 @@
                 <a class="btn" href="{% url 'farmers:dashboard' %}">Cancel</a>
             </div>
         </form>
+        {% endif %}
     </div>
-</body>
-</html>
+    {% endif %}
+{% endblock %}
