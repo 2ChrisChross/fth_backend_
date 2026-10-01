@@ -2,6 +2,10 @@
 
 This guide covers local PostgreSQL development. It does not describe production deployment.
 
+## API documentation
+
+- [Farmer registration and authentication API](farmers/API.md)
+
 ## Prerequisites
 
 - PostgreSQL running locally on `localhost:5432`.
