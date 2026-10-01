@@ -1,6 +1,7 @@
-from decimal import Decimal
+from urllib.parse import urlsplit
 
 from django.contrib import messages
+from django.contrib.auth.hashers import make_password
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -9,14 +10,23 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from farmers.models import Farm, FarmerCodeRequest
 from farmers.registration import create_farmer_registration
-from farmers.serializers import FarmerRegistrationSerializer
+from farmers.serializers import (
+    FarmerDashboardRegistrationSerializer,
+    FarmerDashboardUpdateSerializer,
+)
 from farmers.workflows import (
     FarmerWorkflowConflict,
     FarmerWorkflowValidationError,
     manually_verify_farmer,
 )
 from shared.audit import log_staff_audit_change
-from shared.models import Address, ElectronicDocument, PhoneNumber, User
+from shared.models import (
+    ElectronicDocument,
+    EnumeratedValue,
+    PhoneNumber,
+    User,
+)
+from shared.registration import create_address, resolve_enum_order_id
 
 from .permissions import (
     dashboard_navigation,
@@ -46,77 +56,196 @@ def _farmer_audit_values(user, phone, farm):
     }
 
 
+def _save_farmer_address(address, data, prefix, address_type):
+    if prefix == "farm_":
+        house_number = data["farm_house_number"]
+        street = data["farm_street"]
+        fields = {
+            "street_address": f"{house_number} {street}".strip()
+            if house_number
+            else street,
+            "barangay": data["farm_barangay"],
+            "municipality_city": data["farm_municipality"],
+            "province": data["farm_province"],
+            "postal_code": data["farm_postal_code"],
+            "country": data.get("farm_country") or "Philippines",
+            "gps_coordinates": data["farm_region"],
+        }
+    else:
+        house_number = data["house_number"]
+        street = data["street"]
+        fields = {
+            "street_address": f"{house_number} {street}".strip()
+            if house_number
+            else street,
+            "barangay": data["baranggay"],
+            "municipality_city": data["municipality"],
+            "province": data["province"],
+            "postal_code": data["postal_code"],
+            "country": data.get("country") or "Philippines",
+            "gps_coordinates": data["region"],
+        }
+
+    if address is None:
+        return create_address(fields, address_type)
+
+    for field, value in fields.items():
+        setattr(address, field, value)
+    address.save(update_fields=list(fields))
+    return address
+
+
+def _existing_registration_values(user, phone, farm):
+    personal_address = user.personal_address
+    farm_address = farm.address if farm else None
+
+    def address_value(address, field):
+        return getattr(address, field, "") if address else ""
+
+    return {
+        "phonenumber": phone.mobile_number if phone else "",
+        "username": user.username or "",
+        "firstname": user.first_name or "",
+        "middle_name": user.middle_name or "",
+        "lastname": user.last_name or "",
+        "region": address_value(personal_address, "gps_coordinates"),
+        "province": address_value(personal_address, "province"),
+        "municipality": address_value(personal_address, "municipality_city"),
+        "baranggay": address_value(personal_address, "barangay"),
+        "house_number": "",
+        "street": address_value(personal_address, "street_address"),
+        "postal_code": address_value(personal_address, "postal_code"),
+        "country": address_value(personal_address, "country") or "Philippines",
+        "farm_size": farm.farm_size_hectares if farm else "",
+        "farm_region": address_value(farm_address, "gps_coordinates"),
+        "farm_province": address_value(farm_address, "province"),
+        "farm_municipality": address_value(farm_address, "municipality_city"),
+        "farm_barangay": address_value(farm_address, "barangay"),
+        "farm_house_number": "",
+        "farm_street": address_value(farm_address, "street_address"),
+        "farm_postal_code": address_value(farm_address, "postal_code"),
+        "farm_country": address_value(farm_address, "country") or "Philippines",
+        "language": user.preferred_language or "",
+        "payment_method": user.preferred_payment_method or "",
+    }
+
+
+def _existing_registration_documents(user):
+    defaults = ("Utility Bills", "Valid_ID", "Owner_Address", "Farm_Ownership")
+    try:
+        document_types = {
+            item.ordering: item.value
+            for item in EnumeratedValue.objects.filter(type__iexact="document_type")
+        }
+    except Exception:
+        document_types = {}
+
+    documents = list(user.electronic_documents.order_by("doc_id")[:4])
+    return [
+        {
+            "url": documents[index].file_url or "" if index < len(documents) else "",
+            "type": document_types.get(
+                documents[index].doc_type, defaults[index]
+            )
+            if index < len(documents)
+            else defaults[index],
+        }
+        for index in range(4)
+    ]
+
+
 @transaction.atomic
 def _save_farmer_dashboard_form(
     request,
     user,
     phone,
     farm,
-    first_name,
-    middle_name,
-    last_name,
-    phone_number,
-    farm_size,
-    street,
-    barangay,
-    municipality,
-    province,
-    region,
-    house_number,
+    data,
 ):
     old_values = _farmer_audit_values(user, phone, farm)
-    user.first_name = first_name
-    user.middle_name = middle_name or None
-    user.last_name = last_name
-    user.save(update_fields=["first_name", "middle_name", "last_name"])
+    user.personal_address = _save_farmer_address(
+        user.personal_address, data, "", "residence"
+    )
+    user.username = data["username"]
+    user.first_name = data["firstname"]
+    user.middle_name = data.get("middle_name") or None
+    user.last_name = data["lastname"]
+    user.preferred_language = resolve_enum_order_id(
+        "language", data.get("language") or None
+    )
+    user.preferred_payment_method = resolve_enum_order_id(
+        "payment_method", data.get("payment_method") or None
+    )
+    user_fields = [
+        "personal_address",
+        "username",
+        "first_name",
+        "middle_name",
+        "last_name",
+        "preferred_language",
+        "preferred_payment_method",
+    ]
+    if data.get("password"):
+        user.password_hash = make_password(data["password"])
+        user_fields.append("password_hash")
+    user.save(update_fields=user_fields)
 
     if phone is None:
         phone = PhoneNumber.objects.create(
-            user=user, mobile_number=phone_number or "", phone_type="mobile"
+            user=user, mobile_number=data["phonenumber"], phone_type="mobile"
         )
     else:
-        phone.mobile_number = phone_number or phone.mobile_number
+        phone.mobile_number = data["phonenumber"]
         phone.save(update_fields=["mobile_number"])
 
+    farm_address = _save_farmer_address(
+        farm.address if farm else None, data, "farm_", "farm"
+    )
     if farm is None:
-        address = Address.objects.create(
-            street_address=f"{house_number} {street}"
-            if house_number or street
-            else "",
-            barangay=barangay,
-            municipality_city=municipality,
-            province=province,
-            country="Philippines",
-            gps_coordinates=region or "",
-            address_type="farm",
-        )
         farm = Farm.objects.create(
             user=user,
-            address=address,
-            farm_size_hectares=Decimal(str(farm_size)) if farm_size else None,
+            address=farm_address,
+            farm_size_hectares=data["farm_size"],
         )
     else:
-        if farm.address:
-            farm.address.street_address = (
-                f"{house_number} {street}" if house_number or street else ""
-            )
-            farm.address.barangay = barangay
-            farm.address.municipality_city = municipality
-            farm.address.province = province
-            farm.address.gps_coordinates = region or farm.address.gps_coordinates
-            farm.address.save(
+        farm.address = farm_address
+        farm.farm_size_hectares = data["farm_size"]
+        farm.save(update_fields=["address", "farm_size_hectares"])
+
+    existing_documents = list(user.electronic_documents.order_by("doc_id")[:4])
+    for index, (url, document_type) in enumerate(
+        zip(data["document_urls"][:4], data["document_type_names"][:4])
+    ):
+        path = urlsplit(url).path
+        file_extension = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+        doc_type_id = resolve_enum_order_id("document_type", document_type) or 1
+        if index < len(existing_documents):
+            document = existing_documents[index]
+            changed = document.file_url != url or document.doc_type != doc_type_id
+            document.doc_title = document_type
+            document.doc_type = doc_type_id
+            document.file_url = url
+            document.file_extension = file_extension
+            if changed:
+                document.verification_status = 0
+            document.save(
                 update_fields=[
-                    "street_address",
-                    "barangay",
-                    "municipality_city",
-                    "province",
-                    "gps_coordinates",
+                    "doc_title",
+                    "doc_type",
+                    "file_url",
+                    "file_extension",
+                    "verification_status",
                 ]
             )
-        farm.farm_size_hectares = (
-            Decimal(str(farm_size)) if farm_size else farm.farm_size_hectares
-        )
-        farm.save(update_fields=["farm_size_hectares"])
+        else:
+            ElectronicDocument.objects.create(
+                user=user,
+                doc_title=document_type,
+                doc_type=doc_type_id,
+                file_url=url,
+                file_extension=file_extension,
+                verification_status=0,
+            )
 
     log_staff_audit_change(
         staff_user=request.user,
@@ -125,7 +254,7 @@ def _save_farmer_dashboard_form(
         target_table="USERS",
         target_id=user.user_id,
         old_values=old_values,
-        new_values=_farmer_audit_values(user, phone, farm),
+            new_values=_farmer_audit_values(user, phone, farm),
         request=request,
     )
     return user
@@ -141,7 +270,7 @@ def _create_farmer_from_dashboard(request):
         request.POST.get(f"document_type_{index}", "")
         for index in range(1, 5)
     ]
-    serializer = FarmerRegistrationSerializer(data=registration_data)
+    serializer = FarmerDashboardRegistrationSerializer(data=registration_data)
     if not serializer.is_valid():
         registration_values = request.POST.dict()
         registration_values.pop("password", None)
@@ -205,19 +334,28 @@ def dashboard_user_form(request, user_id=None):
         if user is None:
             return _create_farmer_from_dashboard(request)
 
-        first_name = (request.POST.get("first_name") or "").strip()
-        middle_name = (request.POST.get("middle_name") or "").strip()
-        last_name = (request.POST.get("last_name") or "").strip()
-        phone_number = (request.POST.get("phone_number") or "").strip()
-        farm_size = (request.POST.get("farm_size") or "").strip()
-        street = (request.POST.get("street") or "").strip()
-        barangay = (request.POST.get("barangay") or "").strip()
-        municipality = (request.POST.get("municipality") or "").strip()
-        province = (request.POST.get("province") or "").strip()
-        region = (request.POST.get("region") or "").strip()
-        house_number = (request.POST.get("house_number") or "").strip()
-
-        if not first_name or not last_name:
+        registration_data = request.POST.dict()
+        registration_data["role"] = "Farmer"
+        registration_data["documents"] = [
+            request.POST.get(f"document_{index}", "") for index in range(1, 5)
+        ]
+        registration_data["document_types"] = [
+            request.POST.get(f"document_type_{index}", "")
+            for index in range(1, 5)
+        ]
+        serializer = FarmerDashboardUpdateSerializer(
+            user, data=registration_data
+        )
+        if not serializer.is_valid():
+            registration_values = request.POST.dict()
+            registration_values.pop("password", None)
+            registration_documents = [
+                {
+                    "url": request.POST.get(f"document_{index}", ""),
+                    "type": request.POST.get(f"document_type_{index}", ""),
+                }
+                for index in range(1, 5)
+            ]
             return render(
                 request,
                 "dashboard/farmer_form.html",
@@ -229,30 +367,32 @@ def dashboard_user_form(request, user_id=None):
                     "phone": phone,
                     "farm": farm,
                     "address": address,
+                    "registration_values": registration_values,
+                    "registration_documents": registration_documents,
+                    "registration_errors": serializer.errors,
                     "dashboard_url": dashboard_url("farmers"),
-                    "error": "First name and last name are required.",
                 },
             )
 
-        user = _save_farmer_dashboard_form(
-            request,
-            user,
-            phone,
-            farm,
-            first_name,
-            middle_name,
-            last_name,
-            phone_number,
-            farm_size,
-            street,
-            barangay,
-            municipality,
-            province,
-            region,
-            house_number,
-        )
+        _save_farmer_dashboard_form(request, user, phone, farm, serializer.validated_data)
 
         return redirect(dashboard_url("farmers"))
+
+    registration_mode = user is None
+    if registration_mode:
+        registration_values = {}
+        registration_documents = [
+            {"url": "", "type": document_type}
+            for document_type in (
+                "Utility Bills",
+                "Valid_ID",
+                "Owner_Address",
+                "Farm_Ownership",
+            )
+        ]
+    else:
+        registration_values = _existing_registration_values(user, phone, farm)
+        registration_documents = _existing_registration_documents(user)
 
     return render(
         request,
@@ -260,18 +400,9 @@ def dashboard_user_form(request, user_id=None):
         {
             "section": "farmers",
             "sections": dashboard_navigation(request.user),
-            "registration_mode": user is None,
-            "registration_documents": [
-                {"url": "", "type": document_type}
-                for document_type in (
-                    "Utility Bills",
-                    "Valid_ID",
-                    "Owner_Address",
-                    "Farm_Ownership",
-                )
-            ]
-            if user is None
-            else [],
+            "registration_mode": registration_mode,
+            "registration_values": registration_values,
+            "registration_documents": registration_documents,
             "user": user,
             "phone": phone,
             "farm": farm,

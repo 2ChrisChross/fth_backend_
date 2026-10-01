@@ -10,13 +10,55 @@ from rest_framework_simplejwt.exceptions import TokenError
 from shared.models import User
 
 from . import authentication
-from .serializers import FarmerProfileSerializer
+from .serializers import (
+    FarmerDashboardRegistrationSerializer,
+    FarmerDashboardUpdateSerializer,
+    FarmerProfileSerializer,
+    FarmerRegistrationSerializer,
+)
 from .tokens import FarmerRefreshToken
 
 
 class FarmerRegistrationRouteTests(SimpleTestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
+
+    def valid_registration_data(self):
+        return {
+            "phonenumber": "+639123456789",
+            "username": "test-farmer",
+            "password": "InitialPass!123",
+            "firstname": "Juan",
+            "lastname": "Dela Cruz",
+            "region": "Region I",
+            "province": "Ilocos Norte",
+            "municipality": "Laoag City",
+            "baranggay": "Barangay 1",
+            "house_number": "12",
+            "street": "Main Street",
+            "postal_code": "2900",
+            "farm_size": "2.5",
+            "farm_region": "Region I",
+            "farm_province": "Ilocos Norte",
+            "farm_municipality": "Laoag City",
+            "farm_barangay": "Barangay 1",
+            "farm_house_number": "13",
+            "farm_street": "Farm Road",
+            "farm_postal_code": "2900",
+            "role": "Farmer",
+            "documents": [
+                "https://files.example/one.jpg",
+                "https://files.example/two.jpg",
+                "https://files.example/three.jpg",
+                "https://files.example/four.jpg",
+            ],
+            "document_types": [
+                "Utility Bills",
+                "Valid_ID",
+                "Owner_Address",
+                "Farm_Ownership",
+            ],
+        }
 
     def test_farmer_registration_routes_are_owned_by_farmers_app(self):
         routes = {
@@ -77,6 +119,10 @@ class FarmerRegistrationRouteTests(SimpleTestCase):
             "farm_postal_code",
         )
         data = {field: "value" for field in required_fields}
+        data["phonenumber"] = "09123456789"
+        data["username"] = "test-farmer"
+        data["postal_code"] = "1000"
+        data["farm_postal_code"] = "1000"
         data["farm_size"] = "10"
         data["role"] = "Farmer"
 
@@ -116,6 +162,11 @@ class FarmerRegistrationRouteTests(SimpleTestCase):
             "farm_postal_code",
         )
         data = {field: "1" for field in required_fields}
+        data["phonenumber"] = "09123456789"
+        data["username"] = "test-farmer"
+        data["postal_code"] = "1000"
+        data["farm_postal_code"] = "1000"
+        data["farm_size"] = "10"
         data["role"] = "Bulk_Buyer"
 
         response = register_user(
@@ -152,6 +203,10 @@ class FarmerRegistrationRouteTests(SimpleTestCase):
             "farm_postal_code",
         )
         data = {field: "value" for field in required_fields}
+        data["phonenumber"] = "09123456789"
+        data["username"] = "test-farmer"
+        data["postal_code"] = "1000"
+        data["farm_postal_code"] = "1000"
         data["farm_size"] = "not-a-number"
         data["role"] = "Farmer"
 
@@ -161,6 +216,61 @@ class FarmerRegistrationRouteTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data, {"farm_size": ["Enter a valid number."]})
+
+    def test_registration_rejects_invalid_phone_and_document_urls(self):
+        data = self.valid_registration_data()
+        data["phonenumber"] = "call me"
+        serializer = FarmerRegistrationSerializer(data=data)
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("phonenumber", serializer.errors)
+
+        data = self.valid_registration_data()
+        data["documents"][0] = "not-a-url"
+        serializer = FarmerRegistrationSerializer(data=data)
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("documents", serializer.errors)
+
+    def test_registration_rejects_unsupported_document_type(self):
+        data = self.valid_registration_data()
+        data["document_types"][0] = "Other"
+        serializer = FarmerRegistrationSerializer(data=data)
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("document_types", serializer.errors)
+
+    @patch("farmers.serializers.User.objects.filter")
+    def test_dashboard_registration_requires_numeric_preferences_and_all_document_types(
+        self, filter_users
+    ):
+        filter_users.return_value.exists.return_value = False
+        data = self.valid_registration_data()
+        data["language"] = "English"
+        serializer = FarmerDashboardRegistrationSerializer(data=data)
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("language", serializer.errors)
+
+        data = self.valid_registration_data()
+        data["document_types"] = ["Utility Bills", "", "Owner_Address", "Farm_Ownership"]
+        serializer = FarmerDashboardRegistrationSerializer(data=data)
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("document_types", serializer.errors)
+
+    @patch("farmers.serializers.User.objects.filter")
+    def test_farmer_dashboard_edit_does_not_require_a_new_password(
+        self, filter_users
+    ):
+        filter_users.return_value.exclude.return_value.exists.return_value = False
+        data = self.valid_registration_data()
+        data.pop("password")
+        serializer = FarmerDashboardUpdateSerializer(
+            instance=User(user_id=12), data=data
+        )
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
 
 class FarmerJWTAuthenticationTests(SimpleTestCase):

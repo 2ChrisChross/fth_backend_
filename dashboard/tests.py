@@ -1,3 +1,4 @@
+import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -252,8 +253,96 @@ class DashboardSidebarTests(SimpleTestCase):
         self.assertContains(response, 'name="document_4"')
         self.assertContains(response, 'name="document_type_1"')
 
+    @patch("dashboard.farmer_views.EnumeratedValue.objects.filter", return_value=[])
+    @patch("dashboard.farmer_views.get_object_or_404")
+    @patch("dashboard.farmer_views.database_ready_for_dashboard", return_value=True)
+    def test_edit_farmer_form_uses_prefilled_registration_layout(
+        self, mock_database_ready, get_user, document_types
+    ):
+        personal_address = SimpleNamespace(
+            street_address="10 Main Road",
+            barangay="Barangay 1",
+            municipality_city="Laoag City",
+            province="Ilocos Norte",
+            postal_code="2900",
+            country="Philippines",
+            gps_coordinates="Region I",
+        )
+        farm_address = SimpleNamespace(
+            street_address="12 Farm Road",
+            barangay="Barangay 2",
+            municipality_city="Laoag City",
+            province="Ilocos Norte",
+            postal_code="2901",
+            country="Philippines",
+            gps_coordinates="Region I",
+        )
+        phone = SimpleNamespace(mobile_number="09123456789")
+        farm = SimpleNamespace(farm_size_hectares="2.50", address=farm_address)
+        documents = [
+            SimpleNamespace(
+                file_url=f"https://files.example/{index}.jpg", doc_type=index
+            )
+            for index in range(1, 5)
+        ]
+        user = SimpleNamespace(
+            user_id=12,
+            username="farmer-one",
+            first_name="Juan",
+            middle_name="",
+            last_name="Dela Cruz",
+            personal_address=personal_address,
+            preferred_language=1,
+            preferred_payment_method=2,
+            phone_numbers=SimpleNamespace(first=lambda: phone),
+            farms=SimpleNamespace(first=lambda: farm),
+            electronic_documents=SimpleNamespace(order_by=lambda field: documents),
+        )
+        get_user.return_value = user
+
+        response = dashboard_user_form(
+            self.staff_request("/dashboard/farmers/edit/12/"), 12
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="phonenumber"')
+        self.assertContains(response, 'name="farm_region"')
+        self.assertContains(response, 'name="document_4"')
+        self.assertContains(response, 'name="farm_size" type="number"')
+        self.assertContains(response, 'value="farmer-one"')
+        self.assertContains(response, 'value="https://files.example/1.jpg"')
+        password_input = re.search(
+            r'<input[^>]*name="password"[^>]*>', response.content.decode()
+        )
+        self.assertIsNotNone(password_input)
+        self.assertNotIn("required", password_input.group())
+
+    @patch("dashboard.farmer_views._save_farmer_dashboard_form")
+    @patch("dashboard.farmer_views.get_object_or_404")
+    @patch("dashboard.farmer_views.database_ready_for_dashboard", return_value=True)
+    def test_edit_farmer_rejects_invalid_phone_and_missing_required_fields(
+        self, mock_database_ready, get_user, save_farmer
+    ):
+        user = SimpleNamespace(
+            user_id=12,
+            phone_numbers=SimpleNamespace(first=lambda: None),
+            farms=SimpleNamespace(first=lambda: None),
+        )
+        get_user.return_value = user
+        request = self.factory.post(
+            "/dashboard/farmers/edit/12/", {"phonenumber": "not a phone"}
+        )
+        request.user = self.staff_request("/dashboard/").user
+
+        response = dashboard_user_form(request, 12)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "phonenumber")
+        self.assertContains(response, "region")
+        save_farmer.assert_not_called()
+
     @patch("dashboard.farmer_views.create_farmer_registration")
-    @patch("dashboard.farmer_views.FarmerRegistrationSerializer")
+    @patch("dashboard.farmer_views.FarmerDashboardRegistrationSerializer")
     def test_add_farmer_maps_four_documents_into_registration_payload(
         self, registration_serializer, create_registration
     ):

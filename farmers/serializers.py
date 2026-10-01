@@ -2,6 +2,8 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from rest_framework import serializers
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
@@ -114,8 +116,8 @@ class FarmerTokenRefreshSerializer(TokenRefreshSerializer):
 
 
 class FarmerRegistrationSerializer(serializers.Serializer):
-    phonenumber = serializers.CharField(max_length=255)
-    username = serializers.CharField(max_length=150)
+    phonenumber = serializers.RegexField(r"^\+?[0-9\s().-]{7,25}$", max_length=25)
+    username = serializers.RegexField(r"^[A-Za-z0-9_.-]+$", max_length=150)
     password = serializers.CharField(write_only=True)
     firstname = serializers.CharField(max_length=255)
     lastname = serializers.CharField(max_length=255)
@@ -125,15 +127,22 @@ class FarmerRegistrationSerializer(serializers.Serializer):
     baranggay = serializers.CharField(max_length=255)
     house_number = serializers.CharField(max_length=255)
     street = serializers.CharField(max_length=255)
-    postal_code = serializers.CharField(max_length=20)
-    farm_size = serializers.CharField()
+    postal_code = serializers.RegexField(r"^[A-Za-z0-9][A-Za-z0-9 -]{2,19}$", max_length=20)
+    farm_size = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+        error_messages={"invalid": "Enter a valid number."},
+    )
     farm_region = serializers.CharField(max_length=255)
     farm_province = serializers.CharField(max_length=255)
     farm_municipality = serializers.CharField(max_length=255)
     farm_barangay = serializers.CharField(max_length=255)
     farm_house_number = serializers.CharField(max_length=255)
     farm_street = serializers.CharField(max_length=255)
-    farm_postal_code = serializers.CharField(max_length=20)
+    farm_postal_code = serializers.RegexField(
+        r"^[A-Za-z0-9][A-Za-z0-9 -]{2,19}$", max_length=20
+    )
     role = serializers.CharField(required=False, allow_blank=True)
     middle_name = serializers.CharField(required=False, allow_blank=True)
     midle_name = serializers.CharField(required=False, allow_blank=True)
@@ -188,6 +197,14 @@ class FarmerRegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"documents": ["Provide at least four document URLs."]}
             )
+        validate_url = URLValidator(schemes=("http", "https"))
+        for index, url in enumerate(document_urls[:4], start=1):
+            try:
+                validate_url(url)
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError(
+                    {"documents": [f"Document {index} must be a valid HTTP or HTTPS URL."]}
+                ) from exc
         attrs["document_urls"] = document_urls
 
         document_type_names = attrs.get("document_types")
@@ -206,7 +223,73 @@ class FarmerRegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"document_types": ["Provide a list of document types."]}
             )
-        attrs["document_type_names"] = [
+        document_type_names = [
             str(item).strip() for item in document_type_names if str(item).strip()
         ]
+        allowed_document_types = {
+            "Utility Bills",
+            "Valid_ID",
+            "Owner_Address",
+            "Farm_Ownership",
+        }
+        invalid_document_types = [
+            item for item in document_type_names if item not in allowed_document_types
+        ]
+        if invalid_document_types:
+            raise serializers.ValidationError(
+                {"document_types": ["Select a supported document type."]}
+            )
+        default_document_types = [
+            "Utility Bills",
+            "Valid_ID",
+            "Owner_Address",
+            "Farm_Ownership",
+        ]
+        attrs["document_type_names"] = (
+            document_type_names + default_document_types[len(document_type_names) :]
+        )[:4]
         return attrs
+
+
+class FarmerDashboardRegistrationSerializer(FarmerRegistrationSerializer):
+    language = serializers.RegexField(r"^[1-9][0-9]*$", required=False, allow_blank=True)
+    preferred_language = serializers.RegexField(
+        r"^[1-9][0-9]*$", required=False, allow_blank=True
+    )
+    payment_method = serializers.RegexField(
+        r"^[1-9][0-9]*$", required=False, allow_blank=True
+    )
+    preferred_payment_method = serializers.RegexField(
+        r"^[1-9][0-9]*$", required=False, allow_blank=True
+    )
+
+    def validate_username(self, value):
+        users = User.objects.filter(username__iexact=value)
+        if self.instance is not None:
+            users = users.exclude(user_id=self.instance.user_id)
+        if users.exists():
+            raise serializers.ValidationError("This username is already in use.")
+        return value
+
+    def validate(self, attrs):
+        document_types = attrs.get("document_types")
+        if document_types is None:
+            document_types = attrs.get("document_type")
+        if (
+            not isinstance(document_types, list)
+            or len(document_types) < 4
+            or any(not str(value).strip() for value in document_types[:4])
+        ):
+            raise serializers.ValidationError(
+                {"document_types": ["Select a type for each of the four documents."]}
+            )
+        return super().validate(attrs)
+
+
+class FarmerDashboardUpdateSerializer(FarmerDashboardRegistrationSerializer):
+    password = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=False,
+        write_only=True,
+    )
