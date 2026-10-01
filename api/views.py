@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth.hashers import make_password
 from django.db import connection
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.crypto import get_random_string
@@ -196,7 +197,7 @@ def _resolve_enum_order_id(enum_type, raw_value):
 
 
 def index(request):
-    return Response({"message": "FTH API is running."})
+    return JsonResponse({"message": "FTH API is running."})
 
 
 def database_ready_for_dashboard():
