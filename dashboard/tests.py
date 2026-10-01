@@ -63,6 +63,37 @@ class DashboardSidebarTests(SimpleTestCase):
         self.assertContains(response, "Add New Farmer")
         self.assertNotContains(response, "Add New User")
 
+    def test_farmer_list_hides_phone_farm_size_and_location(self):
+        rendered = get_template("dashboard/records.html").render(
+            {
+                "section": "farmers",
+                "section_title": "Farmers",
+                "sections": [],
+                "rows": [
+                    SimpleNamespace(
+                        name="Juan Dela Cruz",
+                        entity=SimpleNamespace(user_id=12),
+                        created_at=None,
+                        status_label="Pending",
+                    )
+                ],
+                "query": "",
+                "sort_field": "last_name",
+                "sort_dir": "asc",
+                "status_filter": "all",
+                "dashboard_url": "/dashboard/farmers/",
+            }
+        )
+
+        self.assertIn("<th>Name</th>", rendered)
+        self.assertIn("<th>Created</th>", rendered)
+        self.assertIn("<th>Account</th>", rendered)
+        self.assertIn("<th>Actions</th>", rendered)
+        self.assertNotIn("<th>Phone</th>", rendered)
+        self.assertNotIn("<th>Farm Size</th>", rendered)
+        self.assertNotIn("<th>Location</th>", rendered)
+        self.assertNotIn("Farm size</option>", rendered)
+
     @patch("dashboard.services.connection.introspection.table_names")
     def test_dashboard_database_readiness_uses_current_model_table_names(
         self, table_names

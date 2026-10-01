@@ -169,7 +169,6 @@
                             {% if section == 'farmers' %}
                                 <option value="last_name" {% if sort_field == 'last_name' %}selected{% endif %}>Last name</option>
                                 <option value="verification" {% if sort_field == 'verification' %}selected{% endif %}>Verification stage</option>
-                                <option value="farm_size" {% if sort_field == 'farm_size' %}selected{% endif %}>Farm size</option>
                                 <option value="newest" {% if sort_field == 'newest' %}selected{% endif %}>Newest</option>
                             {% elif section == 'logistics' %}
                                 <option value="last_name" {% if sort_field == 'last_name' %}selected{% endif %}>Owner name</option>
@@ -193,7 +192,7 @@
                         </select>
 
                         <button class="btn btn-secondary" type="submit">Filter</button>
-                        {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'farm_size' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' or status_filter != 'all' %}
+                        {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' or status_filter != 'all' %}
                             <a class="btn btn-secondary" href="{{ dashboard_url }}">Clear</a>
                         {% endif %}
                     </form>
@@ -317,9 +316,6 @@
                             <tr>
                                 {% if section == 'farmers' %}
                                     <th>Name</th>
-                                    <th>Phone</th>
-                                    <th>Farm Size</th>
-                                    <th>Location</th>
                                     <th>Created</th>
                                     <th>Account</th>
                                     <th>Actions</th>
@@ -348,9 +344,6 @@
                                 <tr>
                                     {% if section == 'farmers' %}
                                         <td><a href="{% url 'farmers:detail' row.entity.user_id %}">{{ row.name }}</a></td>
-                                        <td>{{ row.phone }}</td>
-                                        <td>{{ row.farm_size }}</td>
-                                        <td>{{ row.location }}</td>
                                         <td>
                                             {% if row.created_at %}
                                                 {{ row.created_at|date:"M d, Y" }}
