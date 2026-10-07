@@ -763,5 +763,5 @@ class FarmerDocumentTypeChoiceTests(SimpleTestCase):
         self.assertEqual(choices, [(1, "Utility Bills"), (2, "Valid ID")])
 
     def test_farmer_types_include_the_identity_documents(self):
-        for name in ("birth_certificate", "national_id", "nbi_clearance"):
+        for name in ("Birth_Certificate", "National_Id", "Nbi_Clearance"):
             self.assertIn(name, workflows.FARMER_DOCUMENT_TYPES)

@@ -33,8 +33,8 @@ def enum_rows(enum_type, values=None, connection_=None):
     params = [str(enum_type)]
     if values:
         placeholders = ", ".join(["%s"] * len(values))
-        sql += f" AND value IN ({placeholders})"
-        params.extend(values)
+        sql += f" AND LOWER(value) IN ({placeholders})"
+        params.extend(str(item).lower() for item in values)
     sql += f" ORDER BY {quoted}"
     with conn.cursor() as cursor:
         cursor.execute(sql, params)

@@ -163,8 +163,11 @@ def _fake_connection(columns, existing=()):
 
     def fetchone():
         sql, params = state["sql"], state["params"]
-        if "AND value =" in sql:
-            hit = any(r[0] == params[0] and r[1] == params[1] for r in existing)
+        if "LOWER(value)" in sql:
+            hit = any(
+                r[0] == params[0] and r[1].lower() == params[1].lower()
+                for r in existing
+            )
         elif "SELECT 1" in sql:
             hit = any(r[0] == params[0] and r[2] == params[1] for r in existing)
         else:
@@ -245,3 +248,8 @@ class SeedEnumeratedValuesMigrationTests(SimpleTestCase):
     def test_nothing_is_written_without_an_ordering_column(self):
         _, inserts = self._run(["type", "value"])
         self.assertEqual(inserts, [])
+
+    def test_existing_row_with_different_capitalisation_is_not_duplicated(self):
+        existing = [("document_type", "birth_certificate", 5)]
+        _, inserts = self._run(["type", "value", "ordering"], existing)
+        self.assertNotIn("Birth_Certificate", {i[1] for i in inserts})
