@@ -754,14 +754,14 @@ class AdminDocumentRequestApiTests(SimpleTestCase):
 
 
 class FarmerDocumentTypeChoiceTests(SimpleTestCase):
-    def test_only_farmer_registration_types_are_offered(self):
-        with patch.object(workflows.EnumeratedValue.objects, "filter") as flt:
-            flt.return_value.order_by.return_value.values_list.return_value = [
-                (1, "Utility Bills"),
-                (2, "Valid_ID"),
-            ]
+    def test_only_farmer_types_are_offered_and_labels_are_readable(self):
+        with patch.object(
+            workflows, "enum_rows", return_value=[(1, "Utility Bills"), (2, "Valid_ID")]
+        ) as rows:
             choices = workflows.document_type_choices()
-        self.assertEqual(
-            flt.call_args.kwargs["value__in"], workflows.FARMER_DOCUMENT_TYPES
-        )
+        rows.assert_called_once_with("document_type", workflows.FARMER_DOCUMENT_TYPES)
         self.assertEqual(choices, [(1, "Utility Bills"), (2, "Valid ID")])
+
+    def test_farmer_types_include_the_identity_documents(self):
+        for name in ("birth_certificate", "national_id", "nbi_clearance"):
+            self.assertIn(name, workflows.FARMER_DOCUMENT_TYPES)

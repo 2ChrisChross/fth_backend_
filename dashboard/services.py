@@ -14,10 +14,10 @@ from shared.models import (
     Address,
     AuditLog,
     ElectronicDocument,
-    EnumeratedValue,
     PhoneNumber,
     User,
 )
+from shared.enums import enum_rows
 from shared.registration import resolve_enum_order_id
 
 DASHBOARD_PAGE_SIZE = 50
@@ -96,9 +96,7 @@ def calendar_status_labels():
     """Map stored calendar_status ordering -> label from ENUMERATED_VALUES."""
     return {
         ordering: value.replace("_", " ")
-        for ordering, value in EnumeratedValue.objects.filter(
-            type__iexact="calendar_status"
-        ).values_list("ordering", "value")
+        for ordering, value in enum_rows("calendar_status")
     }
 
 

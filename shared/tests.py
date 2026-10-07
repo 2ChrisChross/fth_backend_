@@ -142,48 +142,106 @@ class CropCalendarStageTests(SimpleTestCase):
             self.assertTrue(stage_has_stock(stage), stage)
 
 
+def _fake_connection(columns, existing=()):
+    """A connection whose ENUMERATED_VALUES has the given columns and rows."""
+    from unittest.mock import MagicMock
+
+    conn = MagicMock()
+    conn.ops.quote_name.side_effect = lambda name: f'"{name}"'
+    conn.introspection.get_table_description.return_value = [
+        SimpleNamespace(name=name) for name in columns
+    ]
+    cursor = MagicMock()
+    conn.cursor.return_value.__enter__.return_value = cursor
+    inserts = []
+    state = {}
+
+    def execute(sql, params=None):
+        state["sql"], state["params"] = sql, params
+        if sql.startswith("INSERT"):
+            inserts.append(params)
+
+    def fetchone():
+        sql, params = state["sql"], state["params"]
+        if "AND value =" in sql:
+            hit = any(r[0] == params[0] and r[1] == params[1] for r in existing)
+        elif "SELECT 1" in sql:
+            hit = any(r[0] == params[0] and r[2] == params[1] for r in existing)
+        else:
+            hit = False
+        return (1,) if hit else None
+
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = fetchone
+    return conn, inserts
+
+
+class OrderColumnTests(SimpleTestCase):
+    def test_modern_column_is_detected(self):
+        from .enums import order_column
+
+        conn, _ = _fake_connection(["type", "value", "ordering"])
+        self.assertEqual(order_column(connection_=conn), "ordering")
+
+    def test_legacy_order_id_column_is_detected(self):
+        from .enums import order_column
+
+        conn, _ = _fake_connection(["type", "value", "order_id"])
+        self.assertEqual(order_column(connection_=conn), "order_id")
+
+    def test_missing_column_returns_none_and_no_rows(self):
+        from .enums import enum_rows, order_column
+
+        conn, _ = _fake_connection(["type", "value"])
+        self.assertIsNone(order_column(connection_=conn))
+        self.assertEqual(enum_rows("role", connection_=conn), [])
+
+    def test_enum_rows_selects_the_detected_legacy_column(self):
+        from .enums import enum_rows
+
+        conn, _ = _fake_connection(["type", "value", "order_id"])
+        cursor = conn.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = [(2, "Valid_ID")]
+
+        rows = enum_rows("document_type", ("Valid_ID",), connection_=conn)
+
+        sql = cursor.execute.call_args.args[0]
+        self.assertIn('"order_id"', sql)
+        self.assertNotIn('"ordering"', sql)
+        self.assertEqual(rows, [(2, "Valid_ID")])
+
+
 class SeedEnumeratedValuesMigrationTests(SimpleTestCase):
-    def _run(self, existing):
+    def _run(self, columns, existing=()):
         from importlib import import_module
-        from unittest.mock import MagicMock
 
         migration = import_module("shared.migrations.0010_seed_enumerated_values")
-        manager = MagicMock()
-
-        def filter_(**kwargs):
-            result = MagicMock()
-            result.exists.return_value = any(
-                all(row[k] == v for k, v in kwargs.items()) for row in existing
-            )
-            return result
-
-        manager.filter.side_effect = filter_
-        model = MagicMock()
-        model.objects.using.return_value = manager
-        apps_ = MagicMock()
-        apps_.get_model.return_value = model
-        editor = MagicMock()
-        migration.seed_enumerated_values(apps_, editor)
-        return migration, manager
+        conn, inserts = _fake_connection(columns, existing)
+        editor = SimpleNamespace(connection=conn)
+        migration.seed_enumerated_values(None, editor)
+        return migration, inserts
 
     def test_all_rows_are_created_on_an_empty_table(self):
-        migration, manager = self._run([])
-        self.assertEqual(
-            manager.create.call_count, len(migration.ENUMERATED_VALUES)
-        )
+        migration, inserts = self._run(["type", "value", "ordering"])
+        self.assertEqual(len(inserts), len(migration.ENUMERATED_VALUES))
 
-    def test_existing_rows_are_never_changed_or_duplicated(self):
-        existing = [{"type": "role", "value": "Farmer", "ordering": 1}]
-        migration, manager = self._run(existing)
-        created = {c.kwargs["value"] for c in manager.create.call_args_list}
-        self.assertNotIn("Farmer", created)
-        self.assertEqual(
-            manager.create.call_count, len(migration.ENUMERATED_VALUES) - 1
-        )
+    def test_legacy_order_id_table_is_seeded_through_its_own_column(self):
+        migration, inserts = self._run(["type", "value", "order_id"])
+        self.assertEqual(len(inserts), len(migration.ENUMERATED_VALUES))
+
+    def test_existing_rows_are_never_duplicated(self):
+        existing = [("role", "Farmer", 1)]
+        migration, inserts = self._run(["type", "value", "ordering"], existing)
+        self.assertNotIn(("role", "Farmer", 1), [tuple(i) for i in inserts])
+        self.assertEqual(len(inserts), len(migration.ENUMERATED_VALUES) - 1)
 
     def test_row_is_skipped_when_its_ordering_belongs_to_another_value(self):
-        existing = [{"type": "calendar_status", "value": "Other", "ordering": 1}]
-        _, manager = self._run(existing)
-        created = {c.kwargs["value"] for c in manager.create.call_args_list}
-        self.assertNotIn("Land_Preparation", created)
-        self.assertIn("Planting", created)
+        existing = [("calendar_status", "Other", 1)]
+        _, inserts = self._run(["type", "value", "ordering"], existing)
+        values = {i[1] for i in inserts}
+        self.assertNotIn("Land_Preparation", values)
+        self.assertIn("Planting", values)
+
+    def test_nothing_is_written_without_an_ordering_column(self):
+        _, inserts = self._run(["type", "value"])
+        self.assertEqual(inserts, [])

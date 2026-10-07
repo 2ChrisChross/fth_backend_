@@ -1,5 +1,7 @@
 from django.db import migrations
 
+from shared.enums import TABLE, order_column
+
 ENUMERATED_VALUES = (
     ("role", "Farmer", 1),
     ("role", "Bulk_Buyer", 2),
@@ -33,18 +35,34 @@ ENUMERATED_VALUES = (
 
 def seed_enumerated_values(apps, schema_editor):
     """Add missing rows only; existing rows are never changed."""
-    EnumeratedValue = apps.get_model("api", "EnumeratedValue")
-    database = schema_editor.connection.alias
-    manager = EnumeratedValue.objects.using(database)
-    for type_, value, ordering in ENUMERATED_VALUES:
-        if manager.filter(type=type_, value=value).exists():
-            continue
-        if manager.filter(type=type_, ordering=ordering).exists():
-            print(
-                f"\n  Skipped {type_}/{value}: ordering {ordering} is already used."
+    connection = schema_editor.connection
+    column = order_column(connection_=connection)
+    if column is None:
+        print("\n  Skipped enumerated seed: no ordering column found.")
+        return
+    table = connection.ops.quote_name(TABLE)
+    quoted = connection.ops.quote_name(column)
+    with connection.cursor() as cursor:
+        for type_, value, ordering in ENUMERATED_VALUES:
+            cursor.execute(
+                f"SELECT 1 FROM {table} WHERE type = %s AND value = %s",
+                [type_, value],
             )
-            continue
-        manager.create(type=type_, value=value, ordering=ordering)
+            if cursor.fetchone():
+                continue
+            cursor.execute(
+                f"SELECT 1 FROM {table} WHERE type = %s AND {quoted} = %s",
+                [type_, ordering],
+            )
+            if cursor.fetchone():
+                print(
+                    f"\n  Skipped {type_}/{value}: ordering {ordering} is already used."
+                )
+                continue
+            cursor.execute(
+                f"INSERT INTO {table} (type, value, {quoted}) VALUES (%s, %s, %s)",
+                [type_, value, ordering],
+            )
 
 
 class Migration(migrations.Migration):

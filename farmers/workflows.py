@@ -6,7 +6,8 @@ from django.utils import timezone
 from django.utils.crypto import get_random_string
 
 from shared.audit import _log_audit_change, log_staff_audit_change
-from shared.models import ElectronicDocument, EnumeratedValue, PhoneNumber, User
+from shared.enums import enum_rows
+from shared.models import ElectronicDocument, PhoneNumber, User
 from shared.registration import resolve_enum_order_id
 
 from .models import FarmerAdminAuditEvent, FarmerCodeRequest, FarmerDocumentRequest
@@ -82,11 +83,7 @@ def document_type_choices():
     """(ordering, label) for the farmer registration document types."""
     return [
         (ordering, value.replace("_", " "))
-        for ordering, value in EnumeratedValue.objects.filter(
-            type__iexact="document_type", value__in=FARMER_DOCUMENT_TYPES
-        )
-        .order_by("ordering")
-        .values_list("ordering", "value")
+        for ordering, value in enum_rows("document_type", FARMER_DOCUMENT_TYPES)
     ]
 
 
