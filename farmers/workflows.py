@@ -74,8 +74,8 @@ FARMER_DOCUMENT_TYPES = (
     "Owner_Address",
     "Farm_Ownership",
     "Birth_Certificate",
-    "National_Id",
-    "Nbi_Clearance",
+    "National_ID",
+    "NBI_Clearance",
 )
 
 
