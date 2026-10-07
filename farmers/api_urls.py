@@ -4,16 +4,20 @@ from .views import (
     FarmerTokenRefreshView,
     admin_code_request_detail,
     admin_code_requests,
+    admin_farmer_document_requests,
     admin_issue_code,
     admin_manually_verify_farmer,
     admin_mark_code_mailed,
     admin_review_code_request,
+    admin_revoke_document_request,
+    farmer_document_requests,
     farmer_profile,
     login_user,
     logout_user,
     recover_farmer_account,
     register_user,
     request_farmer_code,
+    submit_farmer_document_request,
     verify_user_code,
 )
 
@@ -28,6 +32,16 @@ urlpatterns = [
     path("me/", farmer_profile, name="me"),
     path("code-requests/", request_farmer_code, name="code_request"),
     path("recover/", recover_farmer_account, name="recover"),
+    path(
+        "document-requests/",
+        farmer_document_requests,
+        name="document_requests",
+    ),
+    path(
+        "document-requests/<int:request_id>/submit/",
+        submit_farmer_document_request,
+        name="submit_document_request",
+    ),
     path("admin/code-requests/", admin_code_requests, name="admin_code_requests"),
     path(
         "admin/code-requests/<int:request_id>/",
@@ -48,6 +62,16 @@ urlpatterns = [
         "admin/code-requests/<int:request_id>/mark-mailed/",
         admin_mark_code_mailed,
         name="admin_mark_code_mailed",
+    ),
+    path(
+        "admin/farmers/<int:user_id>/document-requests/",
+        admin_farmer_document_requests,
+        name="admin_farmer_document_requests",
+    ),
+    path(
+        "admin/document-requests/<int:request_id>/revoke/",
+        admin_revoke_document_request,
+        name="admin_revoke_document_request",
     ),
     path(
         "admin/farmers/<int:user_id>/verify/",

@@ -26,5 +26,19 @@ class CanIssueFarmerCodes(FarmerStaffPermission):
     permission = "farmers.issue_farmer_codes"
 
 
+class CanRequestFarmerDocuments(FarmerStaffPermission):
+    permission = "farmers.request_farmer_documents"
+
+
+class CanListOrRequestFarmerDocuments(FarmerStaffPermission):
+    def has_permission(self, request, view):
+        permission = (
+            "farmers.view_farmer_applications"
+            if request.method in ("GET", "HEAD", "OPTIONS")
+            else "farmers.request_farmer_documents"
+        )
+        return has_dashboard_permission(request.user, permission)
+
+
 class CanManuallyVerifyFarmer(FarmerStaffPermission):
     permission = "farmers.manually_verify_farmer"

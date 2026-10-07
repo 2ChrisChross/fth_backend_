@@ -2,6 +2,7 @@ from functools import wraps
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
+from django.db import DatabaseError
 
 NAVIGATION_ITEMS = (
     ("reports", "Reports", "farmers.view_dashboard_reports"),
@@ -33,12 +34,32 @@ def has_dashboard_permission(user, permission):
     return any(user.has_perm(required) for required in permissions)
 
 
+def pending_code_request_farmer_count():
+    from farmers.models import FarmerCodeRequest
+
+    try:
+        return (
+            FarmerCodeRequest.objects.filter(
+                status=FarmerCodeRequest.Status.PENDING_REVIEW
+            )
+            .values("user_id")
+            .distinct()
+            .count()
+        )
+    except DatabaseError:
+        return 0
+
+
 def dashboard_navigation(user):
-    return [
+    items = [
         {"key": key, "label": label}
         for key, label, permission in NAVIGATION_ITEMS
         if has_dashboard_permission(user, permission)
     ]
+    for item in items:
+        if item["key"] == "code_requests":
+            item["badge"] = pending_code_request_farmer_count()
+    return items
 
 
 def dashboard_permission_required(permission):

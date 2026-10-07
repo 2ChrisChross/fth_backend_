@@ -1,0 +1,97 @@
+<style>
+    .docreq-dialog { border: 0; border-radius: 12px; padding: 24px; max-width: 480px; width: calc(100% - 32px); box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+    .docreq-dialog::backdrop { background: rgba(0,0,0,0.45); }
+    .docreq-dialog h2 { margin: 0 0 12px; }
+    .docreq-dialog label { display: grid; gap: 5px; margin-top: 12px; }
+    .docreq-dialog .check { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+    .docreq-dialog textarea { width: 100%; min-height: 90px; padding: 9px 10px; border: 1px solid #c7d0dc; font: inherit; box-sizing: border-box; }
+    .docreq-dialog .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+    .docreq-status { font-weight: 600; }
+    .docreq-status.pending { color: #b45309; }
+    .docreq-status.submitted { color: #15803d; }
+    .docreq-status.revoked { color: #667085; }
+</style>
+<h2>Additional Document Requests</h2>
+{% if pending_document_count %}
+    <p><strong>{{ pending_document_count }} unanswered request{{ pending_document_count|pluralize }}</strong> &mdash; this farmer cannot be verified until they are answered or revoked.</p>
+{% endif %}
+{% if can_request_documents %}
+    <div class="actions"><button type="button" class="button" id="docreq-open">Request Documents</button></div>
+{% endif %}
+<ul class="request-list">
+    {% for doc_request in document_requests %}
+        <li>
+            <strong>{{ doc_request.doc_label }}</strong>
+            <span class="docreq-status {{ doc_request.status }}">{{ doc_request.get_status_display }}</span>
+            ({{ doc_request.requested_at|date:"Y-m-d" }}{% if doc_request.requested_by %} by {{ doc_request.requested_by.username }}{% endif %})
+            &mdash; {{ doc_request.message }}
+            {% if doc_request.status == 'submitted' and doc_request.document %}
+                <a href="{{ doc_request.document.file_url }}" target="_blank" rel="noopener">View submission</a>
+            {% endif %}
+            {% if doc_request.status == 'revoked' and doc_request.revoke_reason %}
+                (revoked: {{ doc_request.revoke_reason }})
+            {% endif %}
+            {% if can_request_documents and doc_request.status == 'pending' %}
+                <button type="button" data-revoke-id="{{ doc_request.request_id }}" data-revoke-label="{{ doc_request.doc_label }}">Revoke</button>
+            {% endif %}
+        </li>
+    {% empty %}
+        <li>No document requests.</li>
+    {% endfor %}
+</ul>
+{% if can_request_documents %}
+<dialog class="docreq-dialog" id="docreq-dialog">
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="request_documents">
+        <h2>Request Documents</h2>
+        <fieldset style="border:0;padding:0;margin:0;">
+            <legend>Documents needed</legend>
+            {% for value, label in document_type_choices %}
+                <label class="check"><input type="checkbox" name="doc_types" value="{{ value }}"> {{ label }}</label>
+            {% endfor %}
+        </fieldset>
+        <label>Why are these needed? What should the farmer do?
+            <textarea name="message" required></textarea>
+        </label>
+        <div class="dialog-actions">
+            <button type="button" data-close>Cancel</button>
+            <button type="submit">Send Request</button>
+        </div>
+    </form>
+</dialog>
+<dialog class="docreq-dialog" id="docreq-revoke-dialog">
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="revoke_document_request">
+        <input type="hidden" name="request_id" id="docreq-revoke-id">
+        <h2>Revoke Request</h2>
+        <p>Revoke the request for <strong id="docreq-revoke-label"></strong>?</p>
+        <label>Reason
+            <textarea name="reason" required></textarea>
+        </label>
+        <div class="dialog-actions">
+            <button type="button" data-close>Cancel</button>
+            <button type="submit">Revoke</button>
+        </div>
+    </form>
+</dialog>
+<script>
+    (function () {
+        var open = document.getElementById("docreq-open");
+        var requestDialog = document.getElementById("docreq-dialog");
+        var revokeDialog = document.getElementById("docreq-revoke-dialog");
+        if (open) { open.addEventListener("click", function () { requestDialog.showModal(); }); }
+        document.querySelectorAll("[data-revoke-id]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                document.getElementById("docreq-revoke-id").value = button.getAttribute("data-revoke-id");
+                document.getElementById("docreq-revoke-label").textContent = button.getAttribute("data-revoke-label");
+                revokeDialog.showModal();
+            });
+        });
+        document.querySelectorAll(".docreq-dialog [data-close]").forEach(function (button) {
+            button.addEventListener("click", function () { button.closest("dialog").close(); });
+        });
+    })();
+</script>
+{% endif %}

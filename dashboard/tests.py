@@ -1,4 +1,4 @@
-import re
+﻿import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -9,24 +9,47 @@ from django.test import RequestFactory, SimpleTestCase
 from django.urls import Resolver404, resolve, reverse
 
 from .farmer_views import (
-    _create_farmer_from_dashboard,
-    dashboard_user_form,
     farmer_detail,
 )
 from .forms import DashboardAuthenticationForm
-from .permissions import dashboard_navigation, has_dashboard_permission
+from .permissions import (
+    dashboard_navigation,
+    has_dashboard_permission,
+    pending_code_request_farmer_count,
+)
 from .services import (
     _paginate_queryset,
     build_dashboard_rows,
+    audit_log_reason,
     database_ready_for_dashboard,
+    farmer_users,
 )
-from .views import dashboard_users, farmer_code_requests
+from .views import dashboard_users, farmer_code_requests, farmer_delete
 from .workflows import DashboardWorkflowValidationError, update_dashboard_status
+
+
+class FarmerUsersScopeTests(SimpleTestCase):
+    @patch("dashboard.services.User.objects.filter")
+    @patch("dashboard.services.resolve_enum_order_id", return_value=1)
+    def test_farmer_users_filters_by_farmer_role(self, _resolve, mock_filter):
+        farmer_users()
+        mock_filter.assert_called_once_with(role=1)
+
+    @patch("dashboard.services.resolve_enum_order_id", return_value=None)
+    def test_farmer_users_is_empty_when_role_not_configured(self, _resolve):
+        with patch("dashboard.services.User.objects.none") as mock_none:
+            farmer_users()
+        mock_none.assert_called_once_with()
 
 
 class DashboardSidebarTests(SimpleTestCase):
     def setUp(self):
         self.factory = RequestFactory()
+        badge = patch(
+            "dashboard.permissions.pending_code_request_farmer_count", return_value=0
+        )
+        badge.start()
+        self.addCleanup(badge.stop)
 
     def staff_request(self, path, data=None):
         request = self.factory.get(path, data)
@@ -55,13 +78,12 @@ class DashboardSidebarTests(SimpleTestCase):
         self.assertContains(response, "Farmers")
 
     @patch("dashboard.views.database_ready_for_dashboard", return_value=False)
-    def test_farmers_tab_uses_farmer_create_label(self, mock_db):
+    def test_farmers_tab_has_no_add_user_button(self, mock_db):
         response = dashboard_users(
             self.staff_request("/dashboard/"), section_override="farmers"
         )
 
-        self.assertContains(response, "Add New Farmer")
-        self.assertNotContains(response, "Add New User")
+        self.assertNotContains(response, "Add New")
 
     def test_farmer_list_hides_phone_farm_size_and_location(self):
         rendered = get_template("dashboard/records.html").render(
@@ -125,12 +147,18 @@ class DashboardSidebarTests(SimpleTestCase):
         self.assertContains(response, "Audit Logs")
 
     @patch("dashboard.views.database_ready_for_dashboard", return_value=False)
-    def test_dashboard_create_actions_stay_with_their_entity(self, mock_db):
+    def test_bulk_buyers_tab_has_no_add_user_button(self, mock_db):
         request = self.staff_request("/dashboard/", {"section": "businesses"})
         response = dashboard_users(request)
 
-        self.assertContains(response, "Add New Bulk Buyer")
-        self.assertNotContains(response, "Add New Vehicle")
+        self.assertNotContains(response, "Add New")
+
+    @patch("dashboard.views.database_ready_for_dashboard", return_value=False)
+    def test_logistics_tab_has_no_add_button(self, mock_db):
+        request = self.staff_request("/dashboard/", {"section": "logistics"})
+        response = dashboard_users(request)
+
+        self.assertNotContains(response, "Add New")
 
     @patch("dashboard.farmer_views.database_ready_for_dashboard", return_value=False)
     def test_farmer_detail_view_renders_database_unavailable_state(self, mock_db):
@@ -175,13 +203,7 @@ class DashboardSidebarTests(SimpleTestCase):
             "/dashboard/farmers/12/",
             "/dashboard/businesses/",
             "/dashboard/logistics/",
-            "/dashboard/create/",
-            "/dashboard/create/businesses/",
-            "/dashboard/farmers/create/",
-            "/dashboard/farmers/edit/1/",
             "/dashboard/farmers/delete/1/",
-            "/dashboard/businesses/create/",
-            "/dashboard/logistics/create/",
         ):
             with self.subTest(path=path):
                 response = self.client.get(path)
@@ -220,9 +242,7 @@ class DashboardSidebarTests(SimpleTestCase):
             "dashboard/farmer_code_requests.html",
             "dashboard/farmer_code_request_detail.html",
             "dashboard/farmer_detail.html",
-            "dashboard/farmer_form.html",
-            "dashboard/farmer_delete_confirm.html",
-            "dashboard/bulk_buyer_vehicle_form.html",
+            "dashboard/_delete_dialog.html",
         ):
             with self.subTest(template=template_name):
                 get_template(template_name)
@@ -257,7 +277,7 @@ class DashboardSidebarTests(SimpleTestCase):
                 self.assertContains(response, 'method="post"')
                 self.assertContains(response, 'action="/dashboard/logout/"')
 
-    @patch("dashboard.views.User.objects.filter")
+    @patch("dashboard.views.farmer_users")
     def test_farmer_status_cannot_be_changed_through_generic_records_post(
         self, filter_users
     ):
@@ -271,156 +291,110 @@ class DashboardSidebarTests(SimpleTestCase):
             dashboard_users(request, section_override="farmers")
         filter_users.assert_not_called()
 
-    @patch("dashboard.farmer_views.database_ready_for_dashboard", return_value=True)
-    def test_add_farmer_form_uses_registration_contract(self, mock_database_ready):
-        response = dashboard_user_form(self.staff_request("/dashboard/farmers/create/"))
-
-        self.assertContains(response, 'name="phonenumber"')
-        self.assertContains(response, 'name="username"')
-        self.assertContains(response, 'name="password"')
-        self.assertContains(response, 'name="firstname"')
-        self.assertContains(response, 'name="farm_region"')
-        self.assertContains(response, 'name="document_1"')
-        self.assertContains(response, 'name="document_4"')
-        self.assertContains(response, 'name="document_type_1"')
-
-    @patch("dashboard.farmer_views.EnumeratedValue.objects.filter", return_value=[])
-    @patch("dashboard.farmer_views.get_object_or_404")
-    @patch("dashboard.farmer_views.database_ready_for_dashboard", return_value=True)
-    def test_edit_farmer_form_uses_prefilled_registration_layout(
-        self, mock_database_ready, get_user, document_types
-    ):
-        personal_address = SimpleNamespace(
-            street_address="10 Main Road",
-            barangay="Barangay 1",
-            municipality_city="Laoag City",
-            province="Ilocos Norte",
-            postal_code="2900",
-            country="Philippines",
-            gps_coordinates="Region I",
-        )
-        farm_address = SimpleNamespace(
-            street_address="12 Farm Road",
-            barangay="Barangay 2",
-            municipality_city="Laoag City",
-            province="Ilocos Norte",
-            postal_code="2901",
-            country="Philippines",
-            gps_coordinates="Region I",
-        )
-        phone = SimpleNamespace(mobile_number="09123456789")
-        farm = SimpleNamespace(farm_size_hectares="2.50", address=farm_address)
-        documents = [
-            SimpleNamespace(
-                file_url=f"https://files.example/{index}.jpg", doc_type=index
-            )
-            for index in range(1, 5)
-        ]
-        user = SimpleNamespace(
-            user_id=12,
-            username="farmer-one",
-            first_name="Juan",
-            middle_name="",
-            last_name="Dela Cruz",
-            personal_address=personal_address,
-            preferred_language=1,
-            preferred_payment_method=2,
-            phone_numbers=SimpleNamespace(first=lambda: phone),
-            farms=SimpleNamespace(first=lambda: farm),
-            electronic_documents=SimpleNamespace(order_by=lambda field: documents),
-        )
-        get_user.return_value = user
-
-        response = dashboard_user_form(
-            self.staff_request("/dashboard/farmers/edit/12/"), 12
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'name="phonenumber"')
-        self.assertContains(response, 'name="farm_region"')
-        self.assertContains(response, 'name="document_4"')
-        self.assertContains(response, 'name="farm_size" type="number"')
-        self.assertContains(response, 'value="farmer-one"')
-        self.assertContains(response, 'value="https://files.example/1.jpg"')
-        password_input = re.search(
-            r'<input[^>]*name="password"[^>]*>', response.content.decode()
-        )
-        self.assertIsNotNone(password_input)
-        self.assertNotIn("required", password_input.group())
-
-    @patch("dashboard.farmer_views._save_farmer_dashboard_form")
-    @patch("dashboard.farmer_views.get_object_or_404")
-    @patch("dashboard.farmer_views.database_ready_for_dashboard", return_value=True)
-    def test_edit_farmer_rejects_invalid_phone_and_missing_required_fields(
-        self, mock_database_ready, get_user, save_farmer
-    ):
-        user = SimpleNamespace(
-            user_id=12,
-            phone_numbers=SimpleNamespace(first=lambda: None),
-            farms=SimpleNamespace(first=lambda: None),
-        )
-        get_user.return_value = user
-        request = self.factory.post(
-            "/dashboard/farmers/edit/12/", {"phonenumber": "not a phone"}
-        )
-        request.user = self.staff_request("/dashboard/").user
-
-        response = dashboard_user_form(request, 12)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "phonenumber")
-        self.assertContains(response, "region")
-        save_farmer.assert_not_called()
-
-    @patch("dashboard.farmer_views.create_farmer_registration")
-    @patch("dashboard.farmer_views.FarmerDashboardRegistrationSerializer")
-    def test_add_farmer_maps_four_documents_into_registration_payload(
-        self, registration_serializer, create_registration
-    ):
-        serializer = registration_serializer.return_value
-        serializer.is_valid.return_value = True
-        serializer.validated_data = {"username": "staff-created"}
-        request = self.factory.post(
+    def test_dashboard_has_no_create_or_edit_routes(self):
+        for path in (
+            "/dashboard/create/",
+            "/dashboard/create/businesses/",
+            "/dashboard/edit/1/",
             "/dashboard/farmers/create/",
-            {
-                "phonenumber": "+639123456789",
-                "username": "staff-created",
-                "password": "InitialPass!123",
-                "document_1": "https://files.example/one.jpg",
-                "document_2": "https://files.example/two.jpg",
-                "document_3": "https://files.example/three.jpg",
-                "document_4": "https://files.example/four.jpg",
-                "document_type_1": "Utility Bills",
-                "document_type_2": "Valid_ID",
-                "document_type_3": "Owner_Address",
-                "document_type_4": "Farm_Ownership",
-            },
-        )
+            "/dashboard/farmers/edit/1/",
+            "/dashboard/businesses/create/",
+            "/dashboard/logistics/create/",
+        ):
+            with self.subTest(path=path), self.assertRaises(Resolver404):
+                resolve(path)
+
+    def test_farmer_delete_route_only_accepts_post(self):
+        request = self.staff_request("/dashboard/farmers/delete/12/")
+
+        response = farmer_delete(request, 12)
+
+        self.assertEqual(response.status_code, 405)
+
+    @patch("dashboard.farmer_views.database_ready_for_dashboard", return_value=True)
+    @patch("dashboard.farmer_views.log_staff_audit_change")
+    @patch("dashboard.farmer_views.transaction.atomic")
+    @patch("dashboard.farmer_views.get_object_or_404")
+    @patch("dashboard.farmer_views.farmer_users")
+    def test_farmer_delete_post_removes_only_farmer_scoped_user(
+        self, scoped_users, get_404, atomic, audit, mock_db
+    ):
+        user = MagicMock()
+        user.phone_numbers.order_by.return_value.first.return_value = None
+        user.farms.select_related.return_value.order_by.return_value.first.return_value = None
+        scoped_users.return_value.select_for_update.return_value.get.return_value = user
+        request = self.factory.post("/dashboard/farmers/delete/12/")
         request.user = self.staff_request("/dashboard/").user
 
-        response = _create_farmer_from_dashboard(request)
+        response = farmer_delete(request, 12)
 
-        registration_serializer.assert_called_once()
-        payload = registration_serializer.call_args.kwargs["data"]
-        self.assertEqual(
-            payload["documents"],
-            [
-                "https://files.example/one.jpg",
-                "https://files.example/two.jpg",
-                "https://files.example/three.jpg",
-                "https://files.example/four.jpg",
-            ],
-        )
-        self.assertEqual(
-            payload["document_types"],
-            ["Utility Bills", "Valid_ID", "Owner_Address", "Farm_Ownership"],
-        )
-        create_registration.assert_called_once_with(
-            serializer.validated_data,
-            request,
-            staff_user=request.user,
-        )
         self.assertEqual(response.status_code, 302)
+        user.delete.assert_called_once_with()
+
+    def test_delete_confirmation_is_a_popup_dialog(self):
+        rendered = get_template("dashboard/_delete_dialog.html").render({})
+
+        self.assertIn("<dialog", rendered)
+        self.assertIn("showModal", rendered)
+
+class AuditLogReasonTests(SimpleTestCase):
+    def setUp(self):
+        badge = patch(
+            "dashboard.permissions.pending_code_request_farmer_count", return_value=0
+        )
+        badge.start()
+        self.addCleanup(badge.stop)
+
+    def test_reason_is_read_from_logged_values(self):
+        log = SimpleNamespace(new_values='{"status": 2, "reason": "Documents unclear"}')
+
+        self.assertEqual(audit_log_reason(log), "Documents unclear")
+
+    def test_reason_is_blank_when_missing_or_unreadable(self):
+        for value in (None, "", "{}", "not json", "[1, 2]"):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    audit_log_reason(SimpleNamespace(new_values=value)), ""
+                )
+
+    def test_audit_table_has_a_reason_column(self):
+        rendered = get_template("dashboard/records.html").render(
+            {
+                "section": "audit_logs",
+                "section_title": "Audit Logs",
+                "sections": [],
+                "rows": [
+                    {
+                        "name": "staff1",
+                        "action": "CODE_REQUEST_REJECTED",
+                        "target": "FARMER_CODE_REQUESTS",
+                        "reason": "Documents unclear",
+                        "created_at": None,
+                    }
+                ],
+                "sort_dir": "desc",
+                "status_filter": "all",
+            }
+        )
+
+        self.assertIn("<th>Reason</th>", rendered)
+        self.assertIn("Documents unclear", rendered)
+
+    @patch("dashboard.views.build_dashboard_rows", return_value=([], None))
+    @patch("dashboard.views.database_ready_for_dashboard", return_value=True)
+    def test_audit_logs_default_to_newest_first(self, _ready, build_rows):
+        request = RequestFactory().get("/dashboard/audit-logs/")
+        request.user = SimpleNamespace(
+            is_active=True,
+            is_staff=True,
+            is_superuser=True,
+            is_authenticated=True,
+            has_perm=lambda perm: True,
+        )
+
+        dashboard_users(request, section_override="audit_logs")
+
+        self.assertEqual(build_rows.call_args.args[3], "desc")
 
 
 class DashboardAppRouteTests(SimpleTestCase):
@@ -575,6 +549,47 @@ class DashboardPermissionTests(SimpleTestCase):
             ["reports", "audit_logs"],
         )
 
+    @patch("dashboard.permissions.pending_code_request_farmer_count", return_value=3)
+    def test_code_requests_navigation_carries_pending_farmer_badge(self, count):
+        user = SimpleNamespace(
+            is_authenticated=True,
+            is_active=True,
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        items = {item["key"]: item for item in dashboard_navigation(user)}
+
+        self.assertEqual(items["code_requests"]["badge"], 3)
+        self.assertNotIn("badge", items["reports"])
+        count.assert_called_once_with()
+
+    @patch("dashboard.permissions.pending_code_request_farmer_count")
+    def test_badge_is_not_queried_without_code_request_access(self, count):
+        groups = MagicMock()
+        groups.exists.return_value = True
+        user = SimpleNamespace(
+            is_authenticated=True,
+            is_active=True,
+            is_staff=True,
+            is_superuser=False,
+            groups=groups,
+            has_perm=lambda permission: permission == "farmers.view_dashboard_reports",
+        )
+
+        dashboard_navigation(user)
+
+        count.assert_not_called()
+
+    @patch("farmers.models.FarmerCodeRequest.objects")
+    def test_pending_count_is_distinct_farmers_in_review(self, manager):
+        chain = manager.filter.return_value.values.return_value.distinct.return_value
+        chain.count.return_value = 2
+
+        self.assertEqual(pending_code_request_farmer_count(), 2)
+        manager.filter.assert_called_once_with(status="pending_review")
+        manager.filter.return_value.values.assert_called_once_with("user_id")
+
 
 class DashboardWorkflowTests(SimpleTestCase):
     @patch("dashboard.workflows.BulkBuyer.objects.select_for_update")
@@ -583,3 +598,17 @@ class DashboardWorkflowTests(SimpleTestCase):
             update_dashboard_status("businesses", 7, "9", None, None)
 
         select_for_update.assert_not_called()
+
+
+class DocumentRequestRouteTests(SimpleTestCase):
+    def test_farmer_document_request_routes_resolve(self):
+        from django.urls import resolve
+
+        self.assertEqual(
+            resolve("/api/farmers/document-requests/").url_name,
+            "document_requests",
+        )
+        self.assertEqual(
+            resolve("/api/farmers/document-requests/5/submit/").url_name,
+            "submit_document_request",
+        )

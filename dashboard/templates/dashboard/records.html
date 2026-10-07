@@ -144,15 +144,6 @@
     </style>
 {% endblock %}
 {% block page_title %}{{ section_title }}{% endblock %}
-{% block header_actions %}
-    {% if section == 'farmers' %}
-        <a class="btn btn-primary" href="{% url 'farmers:create' %}">Add New Farmer</a>
-    {% elif section == 'businesses' %}
-        <a class="btn btn-primary" href="{% url 'businesses:create' %}">Add New Bulk Buyer</a>
-    {% elif section == 'logistics' %}
-        <a class="btn btn-primary" href="{% url 'logistics:create' %}">Add New Vehicle</a>
-    {% endif %}
-{% endblock %}
 {% block content %}
 
             {% if db_error %}
@@ -222,7 +213,7 @@
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
                             <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
                             <input type="hidden" name="status_filter" value="verified">
-                            <button type="submit" class="status-chip {% if status_filter == 'verified' %}active{% endif %}">Verified</button>
+                            <button type="submit" class="status-chip {% if status_filter == 'verified' %}active{% endif %}">Registered</button>
                         </form>
                         <form class="status-chip-form" method="get">
                             <input type="hidden" name="section" value="{{ section }}">
@@ -335,6 +326,7 @@
                                     <th>User</th>
                                     <th>Action</th>
                                     <th>Target</th>
+                                    <th>Reason</th>
                                     <th>Time</th>
                                 {% endif %}
                             </tr>
@@ -355,8 +347,7 @@
                                             <span class="badge">{{ row.status_label }}</span>
                                         </td>
                                         <td>
-                                            <a class="btn btn-secondary" href="{% url 'farmers:edit' row.entity.user_id %}">Edit</a>
-                                            <a class="btn btn-danger" href="{% url 'farmers:delete' row.entity.user_id %}">Delete</a>
+                                            <button type="button" class="btn btn-danger" data-delete-url="{% url 'farmers:delete' row.entity.user_id %}" data-delete-name="{{ row.name }}">Delete</button>
                                         </td>
                                     {% elif section == 'logistics' %}
                                         <td>{{ row.name }}</td>
@@ -410,6 +401,7 @@
                                         <td>{{ row.name }}</td>
                                         <td>{{ row.action }}</td>
                                         <td>{{ row.target }}</td>
+                                        <td>{{ row.reason|default:"-" }}</td>
                                         <td>{{ row.created_at }}</td>
                                     {% endif %}
                                 </tr>
@@ -432,4 +424,5 @@
                     </nav>
                 {% endif %}
             {% endif %}
+{% if section == 'farmers' %}{% include 'dashboard/_delete_dialog.html' %}{% endif %}
 {% endblock %}

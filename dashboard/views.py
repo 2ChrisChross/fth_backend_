@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
@@ -21,10 +21,9 @@ from farmers.workflows import (
     review_farmer_code_request,
 )
 from logistics.models import Vehicle
-from shared.models import AuditLog, PhoneNumber, User
+from shared.models import AuditLog, PhoneNumber
 
-from .bulk_buyer_views import business_create
-from .farmer_views import dashboard_user_delete, dashboard_user_form
+from .farmer_views import dashboard_user_delete
 from .forms import DashboardAuthenticationForm
 from .permissions import (
     dashboard_navigation,
@@ -35,9 +34,9 @@ from .services import (
     DASHBOARD_PAGE_SIZE,
     build_dashboard_rows,
     database_ready_for_dashboard,
+    farmer_users,
 )
 from .services import dashboard_url as _dashboard_url
-from .vehicle_views import logistics_create
 from .workflows import (
     DashboardWorkflowNotFound,
     DashboardWorkflowValidationError,
@@ -121,12 +120,12 @@ def farmer_code_requests(request):
         try:
             if action in ("approve", "reject"):
                 code_request = review_farmer_code_request(
-                    request_id, request.user, action, reason
+                    request_id, request.user, action, reason, request=request
                 )
                 messages.success(request, f"Request {code_request.status}.")
             elif action == "issue":
                 code_request, code, expires_at = issue_farmer_code(
-                    request_id, request.user
+                    request_id, request.user, request=request
                 )
                 request.session["issued_farmer_code"] = {
                     "request_id": code_request.request_id,
@@ -137,7 +136,9 @@ def farmer_code_requests(request):
                     request, "Code issued. Copy and mail it now; it is shown once."
                 )
             else:
-                code_request = mark_farmer_code_mailed(request_id, request.user)
+                code_request = mark_farmer_code_mailed(
+                    request_id, request.user, request=request
+                )
                 messages.success(request, "Mailing recorded.")
         except FarmerCodeRequest.DoesNotExist:
             messages.error(request, "Code request not found.")
@@ -211,6 +212,7 @@ def farmer_code_request_detail(request, request_id):
                 code_request.user_id,
                 request.user,
                 request.POST.get("reason", ""),
+                request=request,
             )
             messages.success(request, "Farmer manually verified.")
         except FarmerWorkflowValidationError as exc:
@@ -258,13 +260,14 @@ def dashboard_reports(request):
             },
         )
 
-    farmers_count = User.objects.count()
+    farmers = farmer_users()
+    farmers_count = farmers.count()
     logistics_count = Vehicle.objects.count()
     bulk_buyers_count = BulkBuyer.objects.count()
 
-    verified_farmers = User.objects.filter(is_verified__in=[1, True, "1"]).count()
-    pending_farmers = User.objects.filter(is_verified__in=[0, None]).count()
-    rejected_farmers = User.objects.filter(is_verified=2).count()
+    verified_farmers = farmers.filter(is_verified__in=[1, True, "1"]).count()
+    pending_farmers = farmers.filter(is_verified__in=[0, None]).count()
+    rejected_farmers = farmers.filter(is_verified=2).count()
 
     approved_bulk_buyers = BulkBuyer.objects.filter(
         is_verified__in=[1, True, "1"]
@@ -314,7 +317,7 @@ def dashboard_reports(request):
 def dashboard_users(request, section_override=None):
     query = (request.GET.get("q") or "").strip()
     sort_field = request.GET.get("sort_field", "last_name")
-    sort_dir = request.GET.get("sort_dir", "asc")
+    sort_dir = request.GET.get("sort_dir")
     status_filter = request.GET.get("status_filter", "all")
     section = (
         section_override
@@ -323,6 +326,9 @@ def dashboard_users(request, section_override=None):
         ).strip()
         or "reports"
     )
+
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc" if section == "audit_logs" else "asc"
 
     required_permissions = {
         "reports": "farmers.view_dashboard_reports",
@@ -408,15 +414,6 @@ def dashboard_audit_logs(request):
     return dashboard_users(request, section_override="audit_logs")
 
 
-@dashboard_permission_required("farmers.manage_dashboard_records")
-def dashboard_entity_form(request, section="farmers"):
-    if section == "businesses":
-        return business_create(request)
-    if section == "logistics":
-        return logistics_create(request)
-    return redirect(_dashboard_url("farmers"))
-
-
 @dashboard_permission_required(
     (
         "farmers.view_farmer_applications",
@@ -425,16 +422,6 @@ def dashboard_entity_form(request, section="farmers"):
 )
 def farmers_dashboard(request):
     return dashboard_users(request, section_override="farmers")
-
-
-@dashboard_permission_required("farmers.manage_dashboard_records")
-def farmer_create(request):
-    return dashboard_user_form(request)
-
-
-@dashboard_permission_required("farmers.manage_dashboard_records")
-def farmer_edit(request, user_id):
-    return dashboard_user_form(request, user_id=user_id)
 
 
 @dashboard_permission_required("farmers.manage_dashboard_records")

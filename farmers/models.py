@@ -211,7 +211,60 @@ class FarmerCodeRequest(models.Model):
             ("view_dashboard_reports", "Can view dashboard reports"),
             ("view_dashboard_audit_logs", "Can view dashboard audit logs"),
             ("manage_dashboard_records", "Can create and edit dashboard records"),
+            (
+                "request_farmer_documents",
+                "Can request additional documents from farmers",
+            ),
         ]
+
+
+class FarmerDocumentRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUBMITTED = "submitted", "Submitted"
+        REVOKED = "revoked", "Revoked"
+
+    request_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(
+        "api.User",
+        on_delete=models.CASCADE,
+        related_name="document_requests",
+    )
+    doc_type = models.BigIntegerField()
+    message = models.TextField()
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_farmer_documents",
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    document = models.ForeignKey(
+        "api.ElectronicDocument",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="document_requests",
+    )
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="revoked_farmer_document_requests",
+    )
+    revoke_reason = models.TextField(blank=True)
+
+    class Meta:
+        managed = True
+        db_table = "FARMER_DOCUMENT_REQUESTS"
+        ordering = ["-requested_at", "-request_id"]
 
 
 class FarmerRevokedRefreshToken(models.Model):

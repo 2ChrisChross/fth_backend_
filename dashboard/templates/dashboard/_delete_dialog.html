@@ -1,0 +1,38 @@
+<style>
+    .delete-dialog { border: 0; border-radius: 12px; padding: 24px; max-width: 420px; width: calc(100% - 32px); box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+    .delete-dialog::backdrop { background: rgba(0,0,0,0.45); }
+    .delete-dialog h2 { margin: 0 0 12px; }
+    .delete-dialog .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+    .delete-dialog .dialog-delete { background: #d9534f; border-color: #d9534f; color: #fff; }
+</style>
+<dialog class="delete-dialog" id="delete-dialog" aria-labelledby="delete-dialog-title">
+    <form method="post" id="delete-dialog-form">
+        {% csrf_token %}
+        <h2 id="delete-dialog-title">Delete Farmer</h2>
+        <p>Are you sure you want to delete <strong id="delete-dialog-name"></strong>? This action cannot be undone.</p>
+        <div class="dialog-actions">
+            <button type="button" id="delete-dialog-cancel">Cancel</button>
+            <button type="submit" class="dialog-delete">Delete</button>
+        </div>
+    </form>
+</dialog>
+<script>
+    (function () {
+        var dialog = document.getElementById("delete-dialog");
+        var form = document.getElementById("delete-dialog-form");
+        var name = document.getElementById("delete-dialog-name");
+        document.querySelectorAll("[data-delete-url]").forEach(function (trigger) {
+            trigger.addEventListener("click", function () {
+                form.action = trigger.getAttribute("data-delete-url");
+                name.textContent = trigger.getAttribute("data-delete-name");
+                dialog.showModal();
+            });
+        });
+        document.getElementById("delete-dialog-cancel").addEventListener("click", function () {
+            dialog.close();
+        });
+        dialog.addEventListener("click", function (event) {
+            if (event.target === dialog) { dialog.close(); }
+        });
+    })();
+</script>

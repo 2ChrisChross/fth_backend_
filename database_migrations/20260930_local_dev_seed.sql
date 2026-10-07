@@ -20,7 +20,14 @@ INSERT INTO "ENUMERATED_VALUES" ("type", "value", "ordering") VALUES
     ('document_type', 'vehicle_driver_license', 11),
     ('document_type', 'official_receipt', 12),
     ('document_type', 'certificate_of_registration', 13),
-    ('document_type', 'nbi_clearance', 14)
+    ('document_type', 'nbi_clearance', 14),
+    ('calendar_status', 'Land_Preparation', 1),
+    ('calendar_status', 'Planting', 2),
+    ('calendar_status', 'Growing', 3),
+    ('calendar_status', 'Harvesting', 4),
+    ('calendar_status', 'Packing', 5),
+    ('calendar_status', 'Ready_for_Delivery', 6),
+    ('calendar_status', 'Delivered', 7)
 ON CONFLICT ("type", "value") DO UPDATE
 SET "ordering" = EXCLUDED."ordering";
 

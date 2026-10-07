@@ -1,39 +1,37 @@
-from urllib.parse import urlsplit
-
-from django.contrib import messages
-from django.contrib.auth.hashers import make_password
+﻿from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
-from farmers.models import Farm, FarmerCodeRequest
-from farmers.registration import create_farmer_registration
-from farmers.serializers import (
-    FarmerDashboardRegistrationSerializer,
-    FarmerDashboardUpdateSerializer,
-)
+from farmers.models import Crop, Farm, FarmerCodeRequest, FarmerDocumentRequest
 from farmers.workflows import (
     FarmerWorkflowConflict,
     FarmerWorkflowValidationError,
+    document_type_choices,
     manually_verify_farmer,
+    request_farmer_documents,
+    revoke_farmer_document_request,
 )
 from shared.audit import log_staff_audit_change
 from shared.models import (
     ElectronicDocument,
-    EnumeratedValue,
-    PhoneNumber,
-    User,
 )
-from shared.registration import create_address, resolve_enum_order_id
 
 from .permissions import (
     dashboard_navigation,
     dashboard_permission_required,
     has_dashboard_permission,
 )
-from .services import dashboard_url, database_ready_for_dashboard
+from .services import (
+    dashboard_url,
+    database_ready_for_dashboard,
+    calendar_status_labels,
+    farm_crops_with_stage,
+    farmer_users,
+)
 
 
 def _farmer_audit_values(user, phone, farm):
@@ -56,362 +54,6 @@ def _farmer_audit_values(user, phone, farm):
     }
 
 
-def _save_farmer_address(address, data, prefix, address_type):
-    if prefix == "farm_":
-        house_number = data["farm_house_number"]
-        street = data["farm_street"]
-        fields = {
-            "street_address": f"{house_number} {street}".strip()
-            if house_number
-            else street,
-            "barangay": data["farm_barangay"],
-            "municipality_city": data["farm_municipality"],
-            "province": data["farm_province"],
-            "postal_code": data["farm_postal_code"],
-            "country": data.get("farm_country") or "Philippines",
-            "gps_coordinates": data["farm_region"],
-        }
-    else:
-        house_number = data["house_number"]
-        street = data["street"]
-        fields = {
-            "street_address": f"{house_number} {street}".strip()
-            if house_number
-            else street,
-            "barangay": data["baranggay"],
-            "municipality_city": data["municipality"],
-            "province": data["province"],
-            "postal_code": data["postal_code"],
-            "country": data.get("country") or "Philippines",
-            "gps_coordinates": data["region"],
-        }
-
-    if address is None:
-        return create_address(fields, address_type)
-
-    for field, value in fields.items():
-        setattr(address, field, value)
-    address.save(update_fields=list(fields))
-    return address
-
-
-def _existing_registration_values(user, phone, farm):
-    personal_address = user.personal_address
-    farm_address = farm.address if farm else None
-
-    def address_value(address, field):
-        return getattr(address, field, "") if address else ""
-
-    return {
-        "phonenumber": phone.mobile_number if phone else "",
-        "username": user.username or "",
-        "firstname": user.first_name or "",
-        "middle_name": user.middle_name or "",
-        "lastname": user.last_name or "",
-        "region": address_value(personal_address, "gps_coordinates"),
-        "province": address_value(personal_address, "province"),
-        "municipality": address_value(personal_address, "municipality_city"),
-        "baranggay": address_value(personal_address, "barangay"),
-        "house_number": "",
-        "street": address_value(personal_address, "street_address"),
-        "postal_code": address_value(personal_address, "postal_code"),
-        "country": address_value(personal_address, "country") or "Philippines",
-        "farm_size": farm.farm_size_hectares if farm else "",
-        "farm_region": address_value(farm_address, "gps_coordinates"),
-        "farm_province": address_value(farm_address, "province"),
-        "farm_municipality": address_value(farm_address, "municipality_city"),
-        "farm_barangay": address_value(farm_address, "barangay"),
-        "farm_house_number": "",
-        "farm_street": address_value(farm_address, "street_address"),
-        "farm_postal_code": address_value(farm_address, "postal_code"),
-        "farm_country": address_value(farm_address, "country") or "Philippines",
-        "language": user.preferred_language or "",
-        "payment_method": user.preferred_payment_method or "",
-    }
-
-
-def _existing_registration_documents(user):
-    defaults = ("Utility Bills", "Valid_ID", "Owner_Address", "Farm_Ownership")
-    try:
-        document_types = {
-            item.ordering: item.value
-            for item in EnumeratedValue.objects.filter(type__iexact="document_type")
-        }
-    except Exception:
-        document_types = {}
-
-    documents = list(user.electronic_documents.order_by("doc_id")[:4])
-    return [
-        {
-            "url": documents[index].file_url or "" if index < len(documents) else "",
-            "type": document_types.get(
-                documents[index].doc_type, defaults[index]
-            )
-            if index < len(documents)
-            else defaults[index],
-        }
-        for index in range(4)
-    ]
-
-
-@transaction.atomic
-def _save_farmer_dashboard_form(
-    request,
-    user,
-    phone,
-    farm,
-    data,
-):
-    old_values = _farmer_audit_values(user, phone, farm)
-    user.personal_address = _save_farmer_address(
-        user.personal_address, data, "", "residence"
-    )
-    user.username = data["username"]
-    user.first_name = data["firstname"]
-    user.middle_name = data.get("middle_name") or None
-    user.last_name = data["lastname"]
-    user.preferred_language = resolve_enum_order_id(
-        "language", data.get("language") or None
-    )
-    user.preferred_payment_method = resolve_enum_order_id(
-        "payment_method", data.get("payment_method") or None
-    )
-    user_fields = [
-        "personal_address",
-        "username",
-        "first_name",
-        "middle_name",
-        "last_name",
-        "preferred_language",
-        "preferred_payment_method",
-    ]
-    if data.get("password"):
-        user.password_hash = make_password(data["password"])
-        user_fields.append("password_hash")
-    user.save(update_fields=user_fields)
-
-    if phone is None:
-        phone = PhoneNumber.objects.create(
-            user=user, mobile_number=data["phonenumber"], phone_type="mobile"
-        )
-    else:
-        phone.mobile_number = data["phonenumber"]
-        phone.save(update_fields=["mobile_number"])
-
-    farm_address = _save_farmer_address(
-        farm.address if farm else None, data, "farm_", "farm"
-    )
-    if farm is None:
-        farm = Farm.objects.create(
-            user=user,
-            address=farm_address,
-            farm_size_hectares=data["farm_size"],
-        )
-    else:
-        farm.address = farm_address
-        farm.farm_size_hectares = data["farm_size"]
-        farm.save(update_fields=["address", "farm_size_hectares"])
-
-    existing_documents = list(user.electronic_documents.order_by("doc_id")[:4])
-    for index, (url, document_type) in enumerate(
-        zip(data["document_urls"][:4], data["document_type_names"][:4])
-    ):
-        path = urlsplit(url).path
-        file_extension = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-        doc_type_id = resolve_enum_order_id("document_type", document_type) or 1
-        if index < len(existing_documents):
-            document = existing_documents[index]
-            changed = document.file_url != url or document.doc_type != doc_type_id
-            document.doc_title = document_type
-            document.doc_type = doc_type_id
-            document.file_url = url
-            document.file_extension = file_extension
-            if changed:
-                document.verification_status = 0
-            document.save(
-                update_fields=[
-                    "doc_title",
-                    "doc_type",
-                    "file_url",
-                    "file_extension",
-                    "verification_status",
-                ]
-            )
-        else:
-            ElectronicDocument.objects.create(
-                user=user,
-                doc_title=document_type,
-                doc_type=doc_type_id,
-                file_url=url,
-                file_extension=file_extension,
-                verification_status=0,
-            )
-
-    log_staff_audit_change(
-        staff_user=request.user,
-        user=user,
-        action_type="UPDATE",
-        target_table="USERS",
-        target_id=user.user_id,
-        old_values=old_values,
-            new_values=_farmer_audit_values(user, phone, farm),
-        request=request,
-    )
-    return user
-
-
-def _create_farmer_from_dashboard(request):
-    registration_data = request.POST.dict()
-    registration_data["role"] = "Farmer"
-    registration_data["documents"] = [
-        request.POST.get(f"document_{index}", "") for index in range(1, 5)
-    ]
-    registration_data["document_types"] = [
-        request.POST.get(f"document_type_{index}", "")
-        for index in range(1, 5)
-    ]
-    serializer = FarmerDashboardRegistrationSerializer(data=registration_data)
-    if not serializer.is_valid():
-        registration_values = request.POST.dict()
-        registration_values.pop("password", None)
-        registration_documents = [
-            {
-                "url": request.POST.get(f"document_{index}", ""),
-                "type": request.POST.get(f"document_type_{index}", ""),
-            }
-            for index in range(1, 5)
-        ]
-        return render(
-            request,
-            "dashboard/farmer_form.html",
-            {
-                "section": "farmers",
-                "sections": dashboard_navigation(request.user),
-                "registration_mode": True,
-                "registration_values": registration_values,
-                "registration_documents": registration_documents,
-                "registration_errors": serializer.errors,
-                "dashboard_url": dashboard_url("farmers"),
-            },
-        )
-
-    create_farmer_registration(
-        serializer.validated_data,
-        request,
-        staff_user=request.user,
-    )
-    return redirect(dashboard_url("farmers"))
-
-
-@dashboard_permission_required("farmers.manage_dashboard_records")
-def dashboard_user_form(request, user_id=None):
-    if not database_ready_for_dashboard():
-        return render(
-            request,
-            "dashboard/farmer_form.html",
-            {
-                "section": "farmers",
-                "sections": dashboard_navigation(request.user),
-                "registration_mode": True,
-                "user": None,
-                "phone": None,
-                "farm": None,
-                "address": None,
-                "dashboard_url": dashboard_url("farmers"),
-                "db_error": (
-                    "The database tables for this app have not been created yet. "
-                    "Run your migrations or connect the correct database."
-                ),
-            },
-        )
-
-    user = get_object_or_404(User, user_id=user_id) if user_id else None
-    phone = user.phone_numbers.first() if user else None
-    farm = user.farms.first() if user else None
-    address = farm.address if farm else None
-
-    if request.method == "POST":
-        if user is None:
-            return _create_farmer_from_dashboard(request)
-
-        registration_data = request.POST.dict()
-        registration_data["role"] = "Farmer"
-        registration_data["documents"] = [
-            request.POST.get(f"document_{index}", "") for index in range(1, 5)
-        ]
-        registration_data["document_types"] = [
-            request.POST.get(f"document_type_{index}", "")
-            for index in range(1, 5)
-        ]
-        serializer = FarmerDashboardUpdateSerializer(
-            user, data=registration_data
-        )
-        if not serializer.is_valid():
-            registration_values = request.POST.dict()
-            registration_values.pop("password", None)
-            registration_documents = [
-                {
-                    "url": request.POST.get(f"document_{index}", ""),
-                    "type": request.POST.get(f"document_type_{index}", ""),
-                }
-                for index in range(1, 5)
-            ]
-            return render(
-                request,
-                "dashboard/farmer_form.html",
-                {
-                    "section": "farmers",
-                    "sections": dashboard_navigation(request.user),
-                    "registration_mode": False,
-                    "user": user,
-                    "phone": phone,
-                    "farm": farm,
-                    "address": address,
-                    "registration_values": registration_values,
-                    "registration_documents": registration_documents,
-                    "registration_errors": serializer.errors,
-                    "dashboard_url": dashboard_url("farmers"),
-                },
-            )
-
-        _save_farmer_dashboard_form(request, user, phone, farm, serializer.validated_data)
-
-        return redirect(dashboard_url("farmers"))
-
-    registration_mode = user is None
-    if registration_mode:
-        registration_values = {}
-        registration_documents = [
-            {"url": "", "type": document_type}
-            for document_type in (
-                "Utility Bills",
-                "Valid_ID",
-                "Owner_Address",
-                "Farm_Ownership",
-            )
-        ]
-    else:
-        registration_values = _existing_registration_values(user, phone, farm)
-        registration_documents = _existing_registration_documents(user)
-
-    return render(
-        request,
-        "dashboard/farmer_form.html",
-        {
-            "section": "farmers",
-            "sections": dashboard_navigation(request.user),
-            "registration_mode": registration_mode,
-            "registration_values": registration_values,
-            "registration_documents": registration_documents,
-            "user": user,
-            "phone": phone,
-            "farm": farm,
-            "address": address,
-            "dashboard_url": dashboard_url("farmers"),
-        },
-    )
-
-
 @dashboard_permission_required(
     ("farmers.view_farmer_applications", "farmers.manage_dashboard_records")
 )
@@ -429,7 +71,7 @@ def farmer_detail(request, user_id):
         )
 
     farmer = get_object_or_404(
-        User.objects.select_related("personal_address"),
+        farmer_users().select_related("personal_address"),
         user_id=user_id,
         deleted_at__isnull=True,
     )
@@ -438,22 +80,51 @@ def farmer_detail(request, user_id):
         active_view = "information"
 
     if request.method == "POST":
-        if request.POST.get("action") != "manual_verify" or not (
-            has_dashboard_permission(
-                request.user, "farmers.manually_verify_farmer"
-            )
-        ):
-            raise PermissionDenied
+        action = request.POST.get("action")
         try:
-            manually_verify_farmer(
-                farmer.user_id,
-                request.user,
-                request.POST.get("reason", ""),
-            )
-            messages.success(request, "Farmer manually verified.")
-        except FarmerWorkflowValidationError as exc:
-            messages.error(request, str(exc))
-        except FarmerWorkflowConflict as exc:
+            if action == "manual_verify" and has_dashboard_permission(
+                request.user, "farmers.manually_verify_farmer"
+            ):
+                manually_verify_farmer(
+                    farmer.user_id,
+                    request.user,
+                    request.POST.get("reason", ""),
+                    request=request,
+                )
+                messages.success(request, "Farmer manually verified.")
+            elif action == "request_documents" and has_dashboard_permission(
+                request.user, "farmers.request_farmer_documents"
+            ):
+                created = request_farmer_documents(
+                    farmer.user_id,
+                    request.user,
+                    request.POST.getlist("doc_types"),
+                    request.POST.get("message", ""),
+                    request=request,
+                )
+                messages.success(
+                    request, f"Requested {len(created)} document(s) from the farmer."
+                )
+            elif action == "revoke_document_request" and has_dashboard_permission(
+                request.user, "farmers.request_farmer_documents"
+            ):
+                doc_request = get_object_or_404(
+                    FarmerDocumentRequest,
+                    request_id=int(request.POST.get("request_id") or 0)
+                    if str(request.POST.get("request_id") or "0").isdigit()
+                    else 0,
+                    user=farmer,
+                )
+                revoke_farmer_document_request(
+                    doc_request.request_id,
+                    request.user,
+                    request.POST.get("reason", ""),
+                    request=request,
+                )
+                messages.success(request, "Document request revoked.")
+            else:
+                raise PermissionDenied
+        except (FarmerWorkflowValidationError, FarmerWorkflowConflict) as exc:
             messages.error(request, str(exc))
         return redirect(f"{request.path}?view=information")
 
@@ -473,6 +144,17 @@ def farmer_detail(request, user_id):
         "-requested_at"
     )[:6]
     farm_count = farmer.farms.count()
+    type_choices = document_type_choices()
+    type_labels = dict(type_choices)
+    document_requests = list(
+        FarmerDocumentRequest.objects.filter(user=farmer)
+        .select_related("requested_by", "document")
+        .order_by("-requested_at", "-request_id")[:30]
+    )
+    for doc_request in document_requests:
+        doc_request.doc_label = type_labels.get(
+            doc_request.doc_type, f"Document type {doc_request.doc_type}"
+        )
     page_obj = None
     farms = []
     farm_status = request.GET.get("farm_status", "active")
@@ -528,8 +210,21 @@ def farmer_detail(request, user_id):
         else:
             farm_sort = "newest"
             farm_queryset = farm_queryset.order_by("-farm_id")
+        farm_queryset = farm_queryset.prefetch_related(
+            Prefetch(
+                "crops",
+                queryset=Crop.objects.filter(deleted_at__isnull=True)
+                .select_related("crop_type")
+                .prefetch_related("calendars")
+                .order_by("crop_id"),
+                to_attr="active_crops",
+            )
+        )
         page_obj = Paginator(farm_queryset, 20).get_page(request.GET.get("page"))
-        farms = page_obj.object_list
+        farms = list(page_obj.object_list)
+        labels = calendar_status_labels()
+        for farm in farms:
+            farm.active_crops = farm_crops_with_stage(farm.active_crops, labels)
 
     return render(
         request,
@@ -541,6 +236,14 @@ def farmer_detail(request, user_id):
             "phone": phone,
             "code_requests": code_requests,
             "farm_count": farm_count,
+            "document_requests": document_requests,
+            "document_type_choices": type_choices,
+            "pending_document_count": sum(
+                1 for item in document_requests if item.status == "pending"
+            ),
+            "can_request_documents": has_dashboard_permission(
+                request.user, "farmers.request_farmer_documents"
+            ),
             "active_view": active_view,
             "farms": farms,
             "page_obj": page_obj,
@@ -564,50 +267,34 @@ def farmer_detail(request, user_id):
     )
 
 
+@require_POST
 @dashboard_permission_required("farmers.manage_dashboard_records")
 def dashboard_user_delete(request, user_id):
     if not database_ready_for_dashboard():
-        return render(
+        messages.error(
             request,
-            "dashboard/farmer_delete_confirm.html",
-            {
-                "section": "farmers",
-                "sections": dashboard_navigation(request.user),
-                "user": None,
-                "db_error": (
-                    "The database tables for this app have not been created yet. "
-                    "Run your migrations or connect the correct database."
-                ),
-            },
+            "The database tables for this app have not been created yet. "
+            "Run your migrations or connect the correct database.",
         )
-
-    user = get_object_or_404(User, user_id=user_id)
-    if request.method == "POST":
-        with transaction.atomic():
-            user = User.objects.select_for_update().get(user_id=user_id)
-            previous = _farmer_audit_values(
-                user,
-                user.phone_numbers.order_by("phone_id").first(),
-                user.farms.select_related("address").order_by("farm_id").first(),
-            )
-            log_staff_audit_change(
-                staff_user=request.user,
-                user=user,
-                action_type="DELETE",
-                target_table="USERS",
-                target_id=user_id,
-                old_values=previous,
-                new_values={},
-                request=request,
-            )
-            user.delete()
         return redirect(dashboard_url("farmers"))
-    return render(
-        request,
-        "dashboard/farmer_delete_confirm.html",
-        {
-            "section": "farmers",
-            "sections": dashboard_navigation(request.user),
-            "user": user,
-        },
-    )
+
+    get_object_or_404(farmer_users(), user_id=user_id)
+    with transaction.atomic():
+        user = farmer_users().select_for_update().get(user_id=user_id)
+        previous = _farmer_audit_values(
+            user,
+            user.phone_numbers.order_by("phone_id").first(),
+            user.farms.select_related("address").order_by("farm_id").first(),
+        )
+        log_staff_audit_change(
+            staff_user=request.user,
+            user=user,
+            action_type="DELETE",
+            target_table="USERS",
+            target_id=user_id,
+            old_values=previous,
+            new_values={},
+            request=request,
+        )
+        user.delete()
+    return redirect(dashboard_url("farmers"))

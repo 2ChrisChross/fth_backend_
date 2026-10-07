@@ -1,3 +1,15 @@
+.venv/
 env/
 fth_backend\api\tests.py
 fth_backend\database_migrations
+__pycache__/
+*.pyc
+*.sqlite3
+.env
+.env.*
+*.pem
+*.key
+.vscode/
+.idea/
+*.log
+staticfiles/

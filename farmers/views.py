@@ -15,10 +15,12 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from farmers.models import FarmerCodeRequest
+from farmers.models import FarmerCodeRequest, FarmerDocumentRequest
 from farmers.permissions import (
     CanIssueFarmerCodes,
+    CanListOrRequestFarmerDocuments,
     CanManuallyVerifyFarmer,
+    CanRequestFarmerDocuments,
     CanReviewFarmerCodeRequests,
     CanViewFarmerApplications,
     CanViewFarmerCodeRequests,
@@ -29,10 +31,15 @@ from farmers.workflows import (
     OPEN_CODE_REQUEST_STATUSES,
     FarmerWorkflowConflict,
     FarmerWorkflowValidationError,
+    document_type_choices,
     issue_farmer_code,
     manually_verify_farmer,
     mark_farmer_code_mailed,
+    pending_document_requests,
+    request_farmer_documents,
     review_farmer_code_request,
+    revoke_farmer_document_request,
+    submit_farmer_document,
 )
 from shared.models import PhoneNumber, User
 from shared.registration import resolve_enum_order_id
@@ -242,6 +249,14 @@ def verify_user_code(request):
             continue
         with transaction.atomic():
             user = User.objects.select_for_update().get(pk=user.pk)
+            if pending_document_requests(user).exists():
+                return Response(
+                    {
+                        "valid": False,
+                        "detail": "Additional documents were requested. Submit them before verifying.",
+                    },
+                    status=status.HTTP_200_OK,
+                )
             if user.is_verified == 1 or not check_password(
                 data["verification_code"], user.verification_code or ""
             ):
@@ -437,7 +452,7 @@ def admin_review_code_request(request, request_id):
     reason = str(request.data.get("reason") or "").strip()
     try:
         code_request = review_farmer_code_request(
-            request_id, request.user, decision, reason
+            request_id, request.user, decision, reason, request=request
         )
     except FarmerCodeRequest.DoesNotExist:
         return Response(
@@ -455,7 +470,9 @@ def admin_review_code_request(request, request_id):
 @permission_classes([CanIssueFarmerCodes])
 def admin_issue_code(request, request_id):
     try:
-        code_request, code, expires_at = issue_farmer_code(request_id, request.user)
+        code_request, code, expires_at = issue_farmer_code(
+            request_id, request.user, request=request
+        )
     except FarmerCodeRequest.DoesNotExist:
         return Response(
             {"detail": "Request not found."}, status=status.HTTP_404_NOT_FOUND
@@ -479,7 +496,9 @@ def admin_issue_code(request, request_id):
 @permission_classes([CanIssueFarmerCodes])
 def admin_mark_code_mailed(request, request_id):
     try:
-        code_request = mark_farmer_code_mailed(request_id, request.user)
+        code_request = mark_farmer_code_mailed(
+            request_id, request.user, request=request
+        )
     except FarmerCodeRequest.DoesNotExist:
         return Response(
             {"detail": "Request not found."}, status=status.HTTP_404_NOT_FOUND
@@ -495,7 +514,7 @@ def admin_mark_code_mailed(request, request_id):
 def admin_manually_verify_farmer(request, user_id):
     reason = str(request.data.get("reason") or "").strip()
     try:
-        manually_verify_farmer(user_id, request.user, reason)
+        manually_verify_farmer(user_id, request.user, reason, request=request)
     except User.DoesNotExist:
         return Response(
             {"detail": "Farmer not found."}, status=status.HTTP_404_NOT_FOUND
@@ -505,6 +524,163 @@ def admin_manually_verify_farmer(request, user_id):
     except FarmerWorkflowConflict as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
     return Response({"user_id": user_id, "is_verified": True})
+
+
+def _document_request_payload(doc_request, labels):
+    return {
+        "request_id": doc_request.request_id,
+        "doc_type": doc_request.doc_type,
+        "doc_type_label": labels.get(doc_request.doc_type, str(doc_request.doc_type)),
+        "message": doc_request.message,
+        "status": doc_request.status,
+        "requested_at": doc_request.requested_at,
+        "submitted_at": doc_request.submitted_at,
+        "revoked_at": doc_request.revoked_at,
+        "revoke_reason": doc_request.revoke_reason,
+    }
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([CanListOrRequestFarmerDocuments])
+def admin_farmer_document_requests(request, user_id):
+    labels = dict(document_type_choices())
+    if request.method == "GET":
+        requests_ = FarmerDocumentRequest.objects.filter(user_id=user_id).order_by(
+            "-requested_at"
+        )
+        return Response(
+            {
+                "results": [_document_request_payload(item, labels) for item in requests_],
+                "document_types": [
+                    {"doc_type": ordering, "label": label}
+                    for ordering, label in labels.items()
+                ],
+            }
+        )
+    doc_types = request.data.get("doc_types")
+    if not isinstance(doc_types, list):
+        return Response(
+            {"detail": "Provide doc_types as a list."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        created = request_farmer_documents(
+            user_id,
+            request.user,
+            doc_types,
+            request.data.get("message"),
+            request=request,
+        )
+    except User.DoesNotExist:
+        return Response(
+            {"detail": "Farmer not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+    except FarmerWorkflowValidationError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except FarmerWorkflowConflict as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    return Response(
+        {"results": [_document_request_payload(item, labels) for item in created]},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([CanRequestFarmerDocuments])
+def admin_revoke_document_request(request, request_id):
+    try:
+        doc_request = revoke_farmer_document_request(
+            request_id,
+            request.user,
+            request.data.get("reason"),
+            request=request,
+        )
+    except FarmerDocumentRequest.DoesNotExist:
+        return Response(
+            {"detail": "Document request not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except FarmerWorkflowValidationError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except FarmerWorkflowConflict as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    return Response(
+        _document_request_payload(doc_request, dict(document_type_choices()))
+    )
+
+
+def _farmer_from_credentials(data):
+    """Unverified farmers cannot log in, so document requests use credentials."""
+    user = User.objects.filter(
+        username=str(data.get("username") or ""), deleted_at__isnull=True
+    ).first()
+    farmer_role_id = resolve_enum_order_id("role", "Farmer")
+    if (
+        user is None
+        or farmer_role_id is None
+        or user.role != farmer_role_id
+        or not check_password(str(data.get("password") or ""), user.password_hash or "")
+    ):
+        return None
+    return user
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def farmer_document_requests(request):
+    farmer = _farmer_from_credentials(request.data)
+    if farmer is None:
+        return Response(
+            {"detail": "Invalid username or password."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+    labels = dict(document_type_choices())
+    pending = FarmerDocumentRequest.objects.filter(
+        user=farmer, status=FarmerDocumentRequest.Status.PENDING
+    ).order_by("requested_at", "request_id")
+    return Response(
+        {
+            "requests": [
+                {
+                    "request_id": item.request_id,
+                    "doc_type": item.doc_type,
+                    "doc_type_label": labels.get(item.doc_type, ""),
+                    "message": item.message,
+                    "requested_at": item.requested_at,
+                }
+                for item in pending
+            ]
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def submit_farmer_document_request(request, request_id):
+    farmer = _farmer_from_credentials(request.data)
+    if farmer is None:
+        return Response(
+            {"detail": "Invalid username or password."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+    try:
+        doc_request = submit_farmer_document(
+            request_id,
+            farmer,
+            str(request.data.get("file_url") or ""),
+            request=request,
+        )
+    except FarmerDocumentRequest.DoesNotExist:
+        return Response(
+            {"detail": "Request not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+    except FarmerWorkflowValidationError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except FarmerWorkflowConflict as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    return Response({"request_id": doc_request.request_id, "status": doc_request.status})
 
 
 @api_view(["POST"])

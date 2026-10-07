@@ -10,8 +10,9 @@
         .sidebar { box-sizing: border-box; flex: 0 0 240px; padding: 24px 18px; background: #12233d; color: #fff; }
         .brand { margin: 0 0 26px; font-size: 1.5rem; font-weight: 700; }
         .nav-section { display: grid; gap: 8px; }
-        .nav-link { display: block; padding: 11px 12px; color: #dfeafc; text-decoration: none; }
+        .nav-link { position: relative; display: block; padding: 11px 12px; color: #dfeafc; text-decoration: none; }
         .nav-link.active { background: #1d4fbf; color: #fff; }
+        .nav-badge { position: absolute; top: 2px; right: 4px; min-width: 18px; padding: 1px 6px; border-radius: 10px; background: #cf222e; color: #fff; font-size: 0.7rem; font-weight: 700; line-height: 1.3; text-align: center; box-sizing: border-box; }
         .main { min-width: 0; flex: 1; padding: 28px; }
         .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
         .title { margin: 0; font-size: 1.8rem; }
@@ -41,7 +42,7 @@
                 {% elif item.key == 'farmers' %}
                     <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'farmers:dashboard' %}">{{ item.label }}</a>
                 {% elif item.key == 'code_requests' %}
-                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_code_requests' %}">{{ item.label }}</a>
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_code_requests' %}">{{ item.label }}{% if item.badge %}<span class="nav-badge" title="Farmers with pending reviews">{{ item.badge }}</span>{% endif %}</a>
                 {% elif item.key == 'logistics' %}
                     <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'logistics:dashboard' %}">{{ item.label }}</a>
                 {% elif item.key == 'businesses' %}

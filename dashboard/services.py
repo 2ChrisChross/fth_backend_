@@ -1,7 +1,11 @@
+import json
+from datetime import timedelta
+
 from django.core.paginator import Paginator
 from django.db import connection
 from django.db.models import OuterRef, Prefetch, Q, Subquery
 from django.urls import reverse
+from django.utils import timezone
 
 from businesses.models import BulkBuyer
 from farmers.models import Farm, FarmerCodeRequest
@@ -10,9 +14,11 @@ from shared.models import (
     Address,
     AuditLog,
     ElectronicDocument,
+    EnumeratedValue,
     PhoneNumber,
     User,
 )
+from shared.registration import resolve_enum_order_id
 
 DASHBOARD_PAGE_SIZE = 50
 
@@ -24,6 +30,15 @@ DASHBOARD_SECTIONS = [
     {"key": "businesses", "label": "Bulk Buyers"},
     {"key": "audit_logs", "label": "Audit Logs"},
 ]
+
+
+def audit_log_reason(log):
+    try:
+        values = json.loads(log.new_values or "{}")
+    except (TypeError, ValueError):
+        return ""
+    reason = values.get("reason") if isinstance(values, dict) else None
+    return str(reason) if reason else ""
 
 
 def database_ready_for_dashboard():
@@ -46,6 +61,84 @@ def database_ready_for_dashboard():
         return required_tables.issubset(existing_tables)
     except Exception:
         return False
+
+
+def crop_calendar_stage(calendar, today=None):
+    """Return the crop calendar stage a calendar is in on `today`."""
+    if calendar is None:
+        return "No calendar"
+    today = today or timezone.localdate()
+    c = calendar
+
+    def within(start, end):
+        return bool(start and end and start <= today <= end)
+
+    if c.delivery_date and today >= c.delivery_date:
+        return "Delivered"
+    if within(c.land_preparation_start, c.land_preparation_end):
+        return "Land preparation"
+    if within(c.planting_start, c.planting_end):
+        return "Planting"
+    if within(c.harvesting_start, c.harvesting_end):
+        return "Harvesting"
+    if c.harvesting_end and today > c.harvesting_end:
+        return "Packing" if c.packing_duration_days is not None and today <= (
+            c.harvesting_end + timedelta(days=c.packing_duration_days)
+        ) else "Ready for delivery"
+    if c.planting_end and today > c.planting_end:
+        return "Growing"
+    if c.land_preparation_end and today > c.land_preparation_end:
+        return "Awaiting planting"
+    return "Scheduled"
+
+
+def calendar_status_labels():
+    """Map stored calendar_status ordering -> label from ENUMERATED_VALUES."""
+    return {
+        ordering: value.replace("_", " ")
+        for ordering, value in EnumeratedValue.objects.filter(
+            type__iexact="calendar_status"
+        ).values_list("ordering", "value")
+    }
+
+
+HARVEST_OR_LATER_STAGES = {
+    "harvesting",
+    "packing",
+    "ready for delivery",
+    "delivered",
+}
+
+
+def stage_has_stock(stage):
+    """Stock only exists once a crop reaches the harvesting stage."""
+    return str(stage).strip().lower() in HARVEST_OR_LATER_STAGES
+
+
+def farm_crops_with_stage(crops, labels=None):
+    """Attach `.stage` to prefetched crops.
+
+    The stored calendar_status wins; dates are only a fallback when it is unset.
+    """
+    labels = calendar_status_labels() if labels is None else labels
+    rows = []
+    for crop in crops:
+        calendars = sorted(crop.calendars.all(), key=lambda cal: cal.calendar_id)
+        latest = calendars[-1] if calendars else None
+        if latest is not None and latest.calendar_status in labels:
+            crop.stage = labels[latest.calendar_status]
+        else:
+            crop.stage = crop_calendar_stage(latest)
+        crop.show_stock = stage_has_stock(crop.stage)
+        rows.append(crop)
+    return rows
+
+
+def farmer_users():
+    farmer_role_id = resolve_enum_order_id("role", "Farmer")
+    if farmer_role_id is None:
+        return User.objects.none()
+    return User.objects.filter(role=farmer_role_id)
 
 
 def dashboard_url(section):
@@ -114,7 +207,7 @@ def build_dashboard_rows(
             .values("created_at")[:1]
         )
         users = (
-            User.objects.annotate(
+            farmer_users().annotate(
                 dashboard_created_at=Subquery(creation_date_query)
             )
             .select_related("personal_address")
@@ -198,12 +291,12 @@ def build_dashboard_rows(
                     )
                     or "-",
                     "status_value": 1 if user.is_verified in (1, True, "1") else 0,
-                    "status_label": "Verified"
+                    "status_label": "Registered"
                     if user.is_verified in (1, True, "1")
                     else "Pending",
                     "status_options": [
                         (0, "Pending"),
-                        (1, "Verified"),
+                        (1, "Registered"),
                         (2, "Rejected"),
                     ],
                     "created_at": user.dashboard_created_at,
@@ -405,6 +498,7 @@ def build_dashboard_rows(
         audit_logs = audit_logs.filter(
             Q(action_type__icontains=query)
             | Q(target_table__icontains=query)
+            | Q(new_values__icontains=query)
             | Q(user__first_name__icontains=query)
             | Q(user__last_name__icontains=query)
         )
@@ -427,6 +521,7 @@ def build_dashboard_rows(
             ),
             "action": log.action_type or "-",
             "target": log.target_table or "-",
+            "reason": audit_log_reason(log),
             "status_label": "Recorded",
             "status_value": 1,
             "status_options": [(1, "Recorded")],
