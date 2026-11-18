@@ -191,6 +191,11 @@ class SimulatorAccessTests(SimpleTestCase):
         self.assertIn('id="farmer-listings"', html)
         self.assertIn('id="refresh-farms"', html)
         self.assertIn('id="refresh-listings"', html)
+        self.assertIn('data-action="add"', html)
+        self.assertIn('data-action="update"', html)
+        self.assertIn('id="crop-expense-form"', html)
+        self.assertNotIn("Listing ID (update only)", html)
+        self.assertNotIn("Existing crop ID (new listing)", html)
 
     @patch("dashboard.simulator.simulator_allowed", return_value=False)
     def test_farmer_page_and_registration_are_unavailable_when_not_allowed(

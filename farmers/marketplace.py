@@ -4,6 +4,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,7 +14,14 @@ from logistics.models import DeliveryAssignment
 from shared.models import Address, Order
 
 from .authentication import FarmerJWTAuthentication
-from .models import Crop, CropCalendar, CropType, Farm, MarketplaceListing
+from .models import (
+    Crop,
+    CropCalendar,
+    CropOperatingExpense,
+    CropType,
+    Farm,
+    MarketplaceListing,
+)
 
 
 class FarmerView(APIView):
@@ -144,6 +152,17 @@ class CropListingUpdate(serializers.Serializer):
     is_active = serializers.BooleanField(required=False)
 
 
+class CropOperatingExpenseSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0")
+    )
+
+    class Meta:
+        model = CropOperatingExpense
+        fields = ("expense_id", "tag", "amount")
+        read_only_fields = ("expense_id",)
+
+
 def farmer_listing_data(listing):
     crop = listing.crop
     return {
@@ -179,6 +198,21 @@ class FarmsView(FarmerView):
         return Response(FarmSerializer(farms, many=True).data)
 
     def post(self, request):
+        if "farm_id" in request.data:
+            farm_id = serializers.IntegerField(min_value=1).run_validation(
+                request.data["farm_id"]
+            )
+            if Farm.objects.filter(pk=farm_id, user=request.user).exists():
+                raise serializers.ValidationError(
+                    {
+                        "farm_id": (
+                            "This farmer already has a farm with this ID. Use Update farm."
+                        )
+                    }
+                )
+            raise serializers.ValidationError(
+                {"farm_id": "Farm IDs are assigned automatically. Clear the ID to add a farm."}
+            )
         serializer = FarmSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -188,12 +222,11 @@ class FarmsView(FarmerView):
 class FarmDetailView(FarmerView):
     @transaction.atomic
     def patch(self, request, farm_id):
-        farm = get_object_or_404(
-            Farm.objects.select_for_update(),
-            pk=farm_id,
-            user=request.user,
-            deleted_at__isnull=True,
-        )
+        farm = Farm.objects.select_for_update().filter(
+            pk=farm_id, user=request.user, deleted_at__isnull=True
+        ).first()
+        if farm is None:
+            raise NotFound("Active farm not found for this farmer.")
         serializer = FarmSerializer(farm, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -238,6 +271,29 @@ class CropsView(FarmerView):
         )
 
 
+class CropExpensesView(FarmerView):
+    def get_crop(self, request, crop_id):
+        return get_object_or_404(
+            Crop,
+            pk=crop_id,
+            farm__user=request.user,
+            farm__deleted_at__isnull=True,
+            deleted_at__isnull=True,
+        )
+
+    def get(self, request, crop_id):
+        crop = self.get_crop(request, crop_id)
+        expenses = crop.operating_expenses.order_by("expense_id")
+        return Response(CropOperatingExpenseSerializer(expenses, many=True).data)
+
+    def post(self, request, crop_id):
+        crop = self.get_crop(request, crop_id)
+        serializer = CropOperatingExpenseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(crop=crop)
+        return Response(serializer.data, status=201)
+
+
 class FarmerListingsView(FarmerView):
     def get(self, request):
         listings = (
@@ -260,6 +316,10 @@ class FarmerListingsView(FarmerView):
                 farm__deleted_at__isnull=True,
                 deleted_at__isnull=True,
             )
+            if crop.crop_type_id is None:
+                raise serializers.ValidationError(
+                    {"crop_id": "This crop has no crop type and cannot be listed."}
+                )
             if "batch_number" in data:
                 crop.batch_number = data["batch_number"]
                 crop.save(update_fields=["batch_number"])

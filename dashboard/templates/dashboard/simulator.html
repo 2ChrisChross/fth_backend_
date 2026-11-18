@@ -335,7 +335,7 @@
             <div id="farmer-farms" role="status" aria-live="polite">Loading farms...</div>
             <form id="farm-form">
                 <h2>Add or update a farm</h2>
-                <p class="help">Leave the ID blank to add a farm with its address and confirmed pin. For an existing farm, check the box below only if replacing its address. Address changes do not alter pickup addresses on existing crop calendars or orders.</p>
+                <p class="help">Leave the ID blank to add a farm; IDs are assigned automatically. To update a farm, enter its ID and check the box below only if replacing its address. Address changes do not alter pickup addresses on existing crop calendars or orders.</p>
                 <div class="grid">
                     <label>Farm ID (update only) <input name="farm_id" type="number" min="1"></label>
                     <label>Size (hectares) <input name="farm_size_hectares" type="number" min="0" step="0.01"></label>
@@ -348,7 +348,7 @@
                 </div>
                 {% include "dashboard/region3_picker.html" with prefix="" required=False %}
                 <p class="help" data-form-status role="status" aria-live="polite"></p>
-                <div class="actions"><button type="submit">Save farm</button></div>
+                <div class="actions"><button type="submit" data-action="add">Add farm</button><button type="submit" data-action="update">Update farm</button></div>
             </form>
         </details>
         <details open>
@@ -363,10 +363,10 @@
                 <h2>Add or update a listing</h2>
                 <p class="help">To add a listing, choose an existing crop or a farm and crop type for a new crop. An existing crop keeps its current stock; update it separately after listing. For updates, provide the listing ID and only fields to change. Stock means currently available, unreserved kilograms; listings for the same crop share it. Deactivate rather than delete a listing.</p>
                 <div class="grid">
-                    <label>Listing ID (update only) <input name="listing_id" type="number" min="1"></label>
-                    <label>Existing crop ID (new listing) <input name="crop_id" type="number" min="1"></label>
-                    <label>Farm ID (new listing) <input name="farm_id" type="number" min="1"></label>
-                    <label>Crop type ID (new listing) <input name="crop_type_id" type="number" min="1"></label>
+                    <label>Listing ID <input name="listing_id" type="number" min="1"></label>
+                    <label>Existing crop ID <input name="crop_id" type="number" min="1"></label>
+                    <label>Farm ID <input name="farm_id" type="number" min="1"></label>
+                    <label>Crop type ID <input name="crop_type_id" type="number" min="1"></label>
                     <label>Batch number <input name="batch_number" maxlength="255"></label>
                     <label>Title <input name="title" maxlength="255"></label>
                     <label>Available stock (kg) <input name="available_stock_kg" type="number" min="0" step="0.01"></label>
@@ -374,6 +374,17 @@
                     <label>Active <select name="is_active"><option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option></select></label>
                 </div>
                 <div class="actions"><button type="submit">Save listing</button></div>
+            </form>
+            <form id="crop-expense-form">
+                <h2>Crop operating expenses</h2>
+                <p class="help">Expenses are total amounts for the crop and are shared across its listings. Use the same currency as the listing price.</p>
+                <div class="grid">
+                    <label>Crop ID <input name="crop_id" type="number" min="1" required></label>
+                    <label>Tag <input name="tag" maxlength="255" required></label>
+                    <label>Amount <input name="amount" type="number" min="0" step="0.01" required></label>
+                </div>
+                <p class="help" data-form-status role="status" aria-live="polite"></p>
+                <div class="actions"><button type="submit">Add expense</button><button type="button" id="view-crop-expenses">View expenses</button></div>
             </form>
         </details>
         <details>

@@ -18,6 +18,7 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from businesses.views import register as register_buyer
 from farmers.marketplace import (
+    CropExpensesView,
     CropsView,
     CropTypesView,
     FarmDetailView,
@@ -278,6 +279,11 @@ def simulator_farmer_api(request, farmer_id, action):
     view = views.get(action)
     kwargs = {}
     if view is None:
+        expense_match = re.fullmatch(r"crops/([1-9][0-9]*)/expenses/", action)
+        if expense_match:
+            view = CropExpensesView
+            kwargs["crop_id"] = int(expense_match.group(1))
+    if view is None:
         match = re.fullmatch(r"(farms|listings)/([1-9][0-9]*)/", action)
         if not match:
             raise Http404
@@ -296,7 +302,9 @@ def simulator_farmer_api(request, farmer_id, action):
             return JsonResponse({"detail": "Provide a JSON object."}, status=400)
         if not isinstance(payload, dict):
             return JsonResponse({"detail": "Provide a JSON object."}, status=400)
-        if request.method == "POST" or "address" in payload:
+        if (
+            request.method == "POST" and "farm_id" not in payload
+        ) or "address" in payload:
             error = validate_address(payload.get("address"))
             if error:
                 return JsonResponse({"address": [error]}, status=400)

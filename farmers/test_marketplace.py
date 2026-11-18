@@ -9,7 +9,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from farmers.models import Crop, CropCalendar, CropType, Farm
+from farmers.models import Crop, CropCalendar, CropOperatingExpense, CropType, Farm
 from logistics.models import LogisticsCompany, Vehicle
 from shared.models import Address, User
 from shared.registration import resolve_enum_order_id
@@ -197,6 +197,106 @@ class FarmerMarketplaceTests(TestCase):
             Crop.objects.get(pk=response.data["crop_id"]).available_stock_kg,
             Decimal("13"),
         )
+
+    def test_farm_add_rejects_ids_and_update_requires_an_owned_active_farm(self):
+        farmer = self.login("farmers", self.farmer)
+        url = "/api/farmers/farms/"
+        response = farmer.post(url, {"farm_id": self.farm.pk}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("already has", str(response.data))
+        response = farmer.post(url, {"farm_id": self.other_farm.pk}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("assigned automatically", str(response.data))
+        address = {
+            "street_address": "Same address",
+            "barangay": "Test",
+            "municipality_city": "Test City",
+            "province": "Test",
+            "postal_code": "1000",
+        }
+        for _ in range(2):
+            response = farmer.post(
+                url, {"farm_size_hectares": "1", "address": address}, format="json"
+            )
+            self.assertEqual(response.status_code, 201, response.data)
+        response = farmer.patch(
+            f"{url}{self.other_farm.pk}/", {"farm_size_hectares": "4"}, format="json"
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("not found", str(response.data).lower())
+        self.farm.deleted_at = timezone.now()
+        self.farm.save(update_fields=["deleted_at"])
+        self.assertEqual(
+            farmer.post(url, {"farm_id": self.farm.pk}, format="json").status_code, 400
+        )
+        self.assertEqual(
+            farmer.patch(
+                f"{url}{self.farm.pk}/", {"farm_size_hectares": "4"}, format="json"
+            ).status_code,
+            404,
+        )
+
+    def test_crop_expenses_are_crop_owned_validated_and_shared(self):
+        farmer = self.login("farmers", self.farmer)
+        other = self.login("farmers", self.other)
+        url = f"/api/farmers/crops/{self.old_crop.pk}/expenses/"
+        for data in (
+            {"tag": "", "amount": "5"},
+            {"tag": "Seed", "amount": "-1"},
+            {"tag": "Seed", "amount": "1.234"},
+            {"tag": "Seed"},
+        ):
+            self.assertEqual(farmer.post(url, data, format="json").status_code, 400)
+        self.assertEqual(other.get(url).status_code, 404)
+        self.assertEqual(
+            other.post(url, {"tag": "Seed", "amount": "1"}, format="json").status_code,
+            404,
+        )
+        for tag, amount in (("Seed", "10.00"), ("Fuel", "20.50"), ("Seed", "2.00")):
+            response = farmer.post(url, {"tag": tag, "amount": amount}, format="json")
+            self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(
+            [(entry["tag"], entry["amount"]) for entry in farmer.get(url).data],
+            [("Seed", "10.00"), ("Fuel", "20.50"), ("Seed", "2.00")],
+        )
+        payload = {
+            "crop_id": self.old_crop.pk,
+            "title": "First",
+            "price_per_kg": "4",
+            "is_active": True,
+        }
+        first = farmer.post("/api/farmers/listings/", payload, format="json")
+        second = farmer.post("/api/farmers/listings/", payload, format="json")
+        self.assertEqual(first.status_code, 201, first.data)
+        self.assertEqual(second.status_code, 201, second.data)
+        self.assertEqual(first.data["crop_id"], second.data["crop_id"])
+        self.assertEqual(
+            CropOperatingExpense.objects.filter(crop=self.old_crop).count(), 3
+        )
+        self.old_crop.deleted_at = timezone.now()
+        self.old_crop.save(update_fields=["deleted_at"])
+        self.assertEqual(farmer.get(url).status_code, 404)
+        self.assertEqual(
+            farmer.post(url, {"tag": "Seed", "amount": "1"}, format="json").status_code,
+            404,
+        )
+
+    def test_existing_crop_without_type_cannot_be_listed(self):
+        farmer = self.login("farmers", self.farmer)
+        self.old_crop.crop_type = None
+        self.old_crop.save(update_fields=["crop_type"])
+        response = farmer.post(
+            "/api/farmers/listings/",
+            {
+                "crop_id": self.old_crop.pk,
+                "title": "Invalid",
+                "price_per_kg": "4",
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("crop type", str(response.data))
 
     def test_existing_crop_can_be_listed_using_its_calendar(self):
         farmer = self.login("farmers", self.farmer)
@@ -433,6 +533,23 @@ class FarmerMarketplaceTests(TestCase):
         )
         self.assertEqual(response.status_code, 201, response.content)
         listing_id = response.json()["listing_id"]
+        expense_url = base + f"crops/{response.json()['crop_id']}/expenses/"
+        expense = self.client.post(
+            expense_url,
+            {"tag": "Fuel", "amount": "5.00"},
+            content_type="application/json",
+        )
+        self.assertEqual(expense.status_code, 201, expense.content)
+        self.assertEqual(self.client.get(expense_url).json()[0]["tag"], "Fuel")
+        self.assertEqual(
+            self.client.get(pending + f"crops/{self.old_crop.pk}/expenses/").status_code,
+            404,
+        )
+        duplicate = self.client.post(
+            base + "farms/", {"farm_id": self.farm.pk}, content_type="application/json"
+        )
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("already has", str(duplicate.content))
         response = self.client.patch(
             base + f"listings/{listing_id}/",
             {"price_per_kg": "-1"},
@@ -471,6 +588,18 @@ class FarmerMarketplaceTests(TestCase):
         client = Client(enforce_csrf_checks=True)
         client.force_login(staff)
         url = f"/dashboard/local-test/farmers/{self.farmer.pk}/api/me/"
+        expense_url = (
+            f"/dashboard/local-test/farmers/{self.farmer.pk}/api/"
+            f"crops/{self.old_crop.pk}/expenses/"
+        )
+        self.assertEqual(
+            client.post(
+                expense_url,
+                {"tag": "Fuel", "amount": "5"},
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
         self.assertEqual(
             client.patch(
                 url, {"first_name": "Blocked"}, content_type="application/json"

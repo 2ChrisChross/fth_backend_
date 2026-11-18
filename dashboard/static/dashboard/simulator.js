@@ -83,6 +83,7 @@
                             form.reset();
                             if (item.price_per_kg !== null) form.elements.price_per_kg.value = item.price_per_kg;
                             fill("farmer-listing-form", "crop_id", item.crop_id);
+                            fill("crop-expense-form", "crop_id", item.crop_id);
                             updateListingStockInput();
                         });
                     }
@@ -92,6 +93,7 @@
                             form.reset();
                             updateListingStockInput();
                             fill("farmer-listing-form", "listing_id", item.listing_id);
+                            fill("crop-expense-form", "crop_id", item.crop_id);
                         });
                     } else if (section === "businesses" && item.listing_id) {
                         addSelectButton(card, "Use listing", () => fill("order-form", "listing_id", item.listing_id));
@@ -198,7 +200,7 @@
             const buttons = Array.from(form.querySelectorAll("button[type=submit]"));
             buttons.forEach((button) => { button.disabled = true; });
             try {
-                await operation(form, formData(form));
+                await operation(form, formData(form), event.submitter);
             } catch (error) {
                 setStatus(error.message, true);
                 if (formStatus) {
@@ -579,26 +581,50 @@
         show(result);
     });
 
-    handle("farm-form", async (form, values) => {
+    handle("farm-form", async (form, values, submitter) => {
         const {farm_id, farm_size_hectares, replace_address, ...addressFields} = values;
+        const updating = submitter && submitter.dataset.action === "update";
+        if (updating && !farm_id) throw new Error("Enter the farm ID to update.");
+        if (!updating && farm_id) {
+            await api("farms/", "POST", {farm_id});
+            throw new Error("Farm IDs are assigned automatically. Clear the ID to add a farm.");
+        }
         const payload = {};
-        if (!farm_id && !farm_size_hectares) throw new Error("Enter the farm size in hectares.");
+        if (!updating && !farm_size_hectares) throw new Error("Enter the farm size in hectares.");
         if (farm_size_hectares !== "") payload.farm_size_hectares = farm_size_hectares;
-        if (!farm_id || replace_address) {
+        if (!updating || replace_address) {
             if (!addressFields.gps_coordinates) throw new Error("Place and confirm the farm address pin.");
             payload.address = nonempty(addressFields);
         }
         if (!Object.keys(payload).length) throw new Error("Enter at least one farm field.");
-        show(await api(farm_id ? `farms/${farm_id}/` : "farms/", farm_id ? "PATCH" : "POST", payload));
-        setStatus(farm_id ? "Farm updated." : "Farm created.");
+        show(await api(updating ? `farms/${farm_id}/` : "farms/", updating ? "PATCH" : "POST", payload));
+        setStatus(updating ? "Farm updated." : "Farm created.");
         const formStatus = form.querySelector("[data-form-status]");
-        formStatus.textContent = farm_id ? "Farm updated." : "Farm created.";
+        formStatus.textContent = updating ? "Farm updated." : "Farm created.";
         formStatus.classList.remove("error");
         if (await loadFarmerCollection("farms") === false) {
             setStatus("Farm saved, but the farm list could not be refreshed.", true);
             formStatus.textContent = "Farm saved, but the farm list could not be refreshed.";
             formStatus.classList.add("error");
         }
+    });
+
+    handle("crop-expense-form", async (form, values) => {
+        const {crop_id, ...payload} = values;
+        show(await api(`crops/${crop_id}/expenses/`, "POST", payload));
+        form.elements.tag.value = "";
+        form.elements.amount.value = "";
+        const formStatus = form.querySelector("[data-form-status]");
+        formStatus.textContent = "Expense added.";
+        formStatus.classList.remove("error");
+        setStatus("Expense added.");
+    });
+
+    handleButton("view-crop-expenses", async () => {
+        const cropId = document.getElementById("crop-expense-form").elements.crop_id.value;
+        if (!/^[1-9]\d*$/.test(cropId)) throw new Error("Enter a valid crop ID.");
+        show(await api(`crops/${cropId}/expenses/`));
+        setStatus("Crop expenses loaded. See results below.");
     });
 
     handle("farmer-listing-form", async (form, values) => {

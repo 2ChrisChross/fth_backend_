@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -66,6 +69,25 @@ class Crop(models.Model):
     class Meta:
         managed = True
         db_table = "CROPS"
+
+
+class CropOperatingExpense(models.Model):
+    expense_id = models.AutoField(primary_key=True)
+    crop = models.ForeignKey(
+        Crop, on_delete=models.CASCADE, related_name="operating_expenses"
+    )
+    tag = models.CharField(max_length=255)
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+    )
+
+    class Meta:
+        db_table = "CROP_OPERATING_EXPENSES"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gte=0), name="crop_expense_amount_nonnegative"
+            )
+        ]
 
 
 class CropCalendar(models.Model):
