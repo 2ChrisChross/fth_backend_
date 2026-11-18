@@ -33,6 +33,7 @@ SECRET_KEY = os.environ.get(
 DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
 
 ENABLE_LOCAL_SIMULATOR = os.environ.get("ENABLE_LOCAL_SIMULATOR", "").lower() == "true"
+ENABLE_LIVE_SIMULATOR = os.environ.get("ENABLE_LIVE_SIMULATOR", "").lower() == "true"
 
 ALLOWED_HOSTS = (os.environ.get("ALLOWED_HOSTS") or "localhost 127.0.0.1").split(" ")
 

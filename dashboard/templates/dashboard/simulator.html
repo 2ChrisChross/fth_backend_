@@ -1,7 +1,7 @@
 {% extends "dashboard/base.html" %}
 {% load static %}
-{% block title %}{% if selected_farmer %}Farmer {{ selected_farmer.username|default:"details" }}{% else %}Local {{ section_title }}{% endif %} simulator{% endblock %}
-{% block page_title %}{% if selected_farmer %}Farmer simulator{% else %}Local {{ section_title }} simulator{% endif %}{% endblock %}
+{% block title %}{% if selected_farmer %}Farmer {{ selected_farmer.username|default:"details" }}{% else %}{{ section_title }}{% endif %} simulator{% endblock %}
+{% block page_title %}{% if selected_farmer %}Farmer simulator{% else %}{{ section_title }} simulator{% endif %}{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% url 'local_map_asset' asset='maplibre-gl.css' %}">
 <style>
@@ -52,7 +52,11 @@
      data-register-url="{% url 'local_simulator_register' section=section %}">
     {% csrf_token %}
     <div class="notice">
-        <strong>Local testing only.</strong> Actions write to your local database. Use test data.
+        {% if live_simulator %}
+            <strong>Live database warning.</strong> Actions create or change real records and can affect real users.
+        {% else %}
+            <strong>Local testing only.</strong> Actions write to your local database. Use test data.
+        {% endif %}
         Documents are URLs, not uploads. A staff member must review the request and issue
         and mark the code mailed before verification. This is not the phone app or a payment system.
     </div>
@@ -62,12 +66,12 @@
     <div class="notice">
         <a href="{% url 'local_simulator' section='farmers' %}">Back to registered farmers</a>
         <p id="selected-farmer">Selected: {{ selected_farmer.username|default:"farmer" }} (ID {{ selected_farmer.user_id }}).</p>
-        <p class="help">Manage this farmer locally without their password. The separate login test uses their real credentials.</p>
+        <p class="help">Manage this farmer without their password. The separate login test uses their real credentials.</p>
     </div>
     {% elif section == "farmers" %}
     <details open>
         <summary>Registered farmers</summary>
-        <p class="help">Select a farmer to manage their records locally without their password, including farmers awaiting verification. The separate login test uses their real credentials.</p>
+        <p class="help">Select a farmer to manage their records without their password, including farmers awaiting verification. The separate login test uses their real credentials.</p>
         <form id="farmer-search-form" class="actions">
             <label>Search by name or username <input name="q"></label>
             <button type="submit">Search farmers</button>

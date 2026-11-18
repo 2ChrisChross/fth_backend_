@@ -1,5 +1,6 @@
 import ipaddress
 import json
+import logging
 import re
 import sqlite3
 import zipfile
@@ -34,6 +35,8 @@ from shared.registration import resolve_enum_order_id
 
 from .permissions import dashboard_navigation, has_dashboard_permission
 from .region3 import locate_point, parse_coordinates, validate_address
+
+logger = logging.getLogger(__name__)
 
 
 @never_cache
@@ -126,11 +129,17 @@ def simulator_map_lookup(request):
             payload.get("latitude"), payload.get("longitude")
         )
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
-        return JsonResponse({"detail": "Provide valid latitude and longitude."}, status=400)
+        return JsonResponse(
+            {"detail": "Provide valid latitude and longitude."}, status=400
+        )
     return JsonResponse(locate_point(latitude, longitude))
 
 
 def simulator_allowed(request):
+    if settings.ENABLE_LIVE_SIMULATOR:
+        return has_dashboard_permission(
+            request.user, "farmers.manage_dashboard_records"
+        )
     if not settings.DEBUG or not settings.ENABLE_LOCAL_SIMULATOR:
         return False
     if settings.DATABASES["default"].get("HOST") not in (
@@ -174,6 +183,7 @@ def simulator_page(request, section):
                 "logistics": "Logistics",
             }[section],
             "sections": dashboard_navigation(request.user),
+            "live_simulator": settings.ENABLE_LIVE_SIMULATOR,
         },
     )
 
@@ -196,6 +206,7 @@ def simulator_farmer_detail(request, farmer_id):
             "section_title": "Farmers",
             "sections": dashboard_navigation(request.user),
             "selected_farmer": farmer,
+            "live_simulator": settings.ENABLE_LIVE_SIMULATOR,
         },
     )
 
@@ -290,6 +301,15 @@ def simulator_farmer_api(request, farmer_id, action):
             if error:
                 return JsonResponse({"address": [error]}, status=400)
     request._simulator_farmer = farmer
+    if settings.ENABLE_LIVE_SIMULATOR:
+        logger.warning(
+            "Live simulator farmer access: "
+            "staff_id=%s farmer_id=%s method=%s action=%s",
+            request.user.pk,
+            farmer_id,
+            request.method,
+            action,
+        )
     return view.as_view(authentication_classes=[LocalFarmerAuthentication])(
         request, **kwargs
     )

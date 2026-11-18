@@ -179,7 +179,7 @@
             if (!mapStatus.classList.contains("error")) mapStatus.textContent = "Local map loaded.";
         });
         map.on("error", (event) => {
-            mapStatus.textContent = `Map error: ${event.error?.message || "Map data could not be loaded."} Check the local map setup in README.`;
+            mapStatus.textContent = `Map error: ${event.error?.message || "Map data could not be loaded."} Check the map setup in README.`;
             mapStatus.classList.add("error");
         });
         element.querySelector("[data-confirm-pin]").addEventListener("click", async () => {

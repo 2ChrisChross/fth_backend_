@@ -4,6 +4,7 @@ from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.models import Group
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -498,3 +499,47 @@ class FarmerMarketplaceTests(TestCase):
         with override_settings(ENABLE_LOCAL_SIMULATOR=False):
             client.force_login(staff)
             self.assertEqual(client.get(url).status_code, 404)
+
+    @override_settings(
+        DEBUG=False, ENABLE_LOCAL_SIMULATOR=False, ENABLE_LIVE_SIMULATOR=True
+    )
+    def test_live_simulator_requires_management_permission_and_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        url = f"/dashboard/local-test/farmers/{self.farmer.pk}/api/me/"
+        proxy = {"REMOTE_ADDR": "192.0.2.1", "HTTP_X_FORWARDED_FOR": "198.51.100.1"}
+        self.assertEqual(client.get(url, **proxy).status_code, 404)
+
+        reviewer = get_user_model().objects.create_user(
+            username="live_reviewer", is_staff=True
+        )
+        reviewer.groups.add(Group.objects.get(name="Reviewer"))
+        client.force_login(reviewer)
+        self.assertEqual(client.get(url, **proxy).status_code, 404)
+
+        manager = get_user_model().objects.create_user(
+            username="live_manager", is_staff=True
+        )
+        manager.groups.add(Group.objects.get(name="Support editor"))
+        client.force_login(manager)
+        self.assertEqual(
+            client.patch(
+                url, {"first_name": "Blocked"}, content_type="application/json", **proxy
+            ).status_code,
+            403,
+        )
+        page = client.get("/dashboard/local-test/farmers/", **proxy)
+        self.assertContains(page, "Live database warning.")
+        with self.assertLogs("dashboard.simulator", level="WARNING") as logs:
+            response = client.patch(
+                url, {"first_name": "Live edit"}, content_type="application/json",
+                HTTP_X_CSRFTOKEN=client.cookies["csrftoken"].value, **proxy,
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn(
+            f"staff_id={manager.pk} farmer_id={self.farmer.pk}", logs.output[0]
+        )
+        self.farmer.refresh_from_db()
+        self.assertEqual(self.farmer.first_name, "Live edit")
+        self.assertEqual(APIClient().get("/api/farmers/me/").status_code, 401)
+        with override_settings(ENABLE_LIVE_SIMULATOR=False):
+            self.assertEqual(client.get(url, **proxy).status_code, 404)

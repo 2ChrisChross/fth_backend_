@@ -57,6 +57,38 @@ class SimulatorAccessTests(SimpleTestCase):
         with patch("dashboard.simulator.settings.DATABASES", self.local_database):
             self.assertFalse(simulator_allowed(self.request))
 
+    @override_settings(
+        DEBUG=False, ENABLE_LOCAL_SIMULATOR=False, ENABLE_LIVE_SIMULATOR=True
+    )
+    @patch("dashboard.simulator.has_dashboard_permission")
+    def test_live_switch_allows_only_authorized_staff_behind_proxy(self, permission):
+        self.request.META["REMOTE_ADDR"] = "192.0.2.1"
+        self.request.META["HTTP_X_FORWARDED_FOR"] = "198.51.100.1"
+        permission.return_value = True
+        self.assertTrue(simulator_allowed(self.request))
+        permission.return_value = False
+        self.assertFalse(simulator_allowed(self.request))
+        permission.assert_called_with(
+            self.request.user, "farmers.manage_dashboard_records"
+        )
+
+    @override_settings(
+        DEBUG=False, ENABLE_LOCAL_SIMULATOR=False, ENABLE_LIVE_SIMULATOR=False
+    )
+    @patch("dashboard.simulator.has_dashboard_permission", return_value=True)
+    def test_live_access_is_off_by_default(self, permission):
+        self.request.META["REMOTE_ADDR"] = "192.0.2.1"
+        self.assertFalse(simulator_allowed(self.request))
+
+    @override_settings(ENABLE_LIVE_SIMULATOR=True)
+    @patch("dashboard.simulator.dashboard_navigation", return_value=[])
+    @patch("dashboard.simulator.simulator_allowed", return_value=True)
+    def test_live_page_warns_that_actions_affect_records(self, allowed, navigation):
+        html = simulator_page(self.request, "farmers").content.decode()
+        self.assertIn("Live database warning.", html)
+        self.assertIn("can affect real users", html)
+        self.assertNotIn("Local testing only.", html)
+
     @override_settings(DEBUG=True, ENABLE_LOCAL_SIMULATOR=False)
     def test_page_and_registration_are_unavailable_when_disabled(self):
         page = self.factory.get("/dashboard/local-test/businesses/")

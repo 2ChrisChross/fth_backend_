@@ -165,7 +165,7 @@
         }
     </style>
 {% endblock %}
-{% block page_title %}{% if local_simulator_enabled %}<a href="{% url 'local_simulator' section=section %}" style="color: inherit; text-decoration: none;" title="Open local app simulator">{{ section_title }}</a>{% else %}{{ section_title }}{% endif %}{% endblock %}
+{% block page_title %}{% if local_simulator_enabled %}<a href="{% url 'local_simulator' section=section %}" style="color: inherit; text-decoration: none;" title="Open app simulator">{{ section_title }}</a>{% else %}{{ section_title }}{% endif %}{% endblock %}
 {% block content %}
 
             {% if db_error %}
