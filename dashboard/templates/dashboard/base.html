@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,6 +10,8 @@
         .dashboard-shell { display: flex; min-height: 100vh; }
         .sidebar { box-sizing: border-box; flex: 0 0 240px; padding: 24px 18px; background: #12233d; color: #fff; }
         .brand { margin: 0 0 26px; font-size: 1.5rem; font-weight: 700; }
+        .nav-group + .nav-group { border-top: 1px solid #40516a; margin-top: 20px; padding-top: 20px; }
+        .nav-heading { margin: 0 12px 8px; color: #b6c8df; font-size: .70rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
         .nav-section { display: grid; gap: 8px; }
         .nav-link { position: relative; display: block; padding: 11px 12px; color: #dfeafc; text-decoration: none; }
         .nav-link.active { background: #1d4fbf; color: #fff; }
@@ -35,14 +38,19 @@
 <div class="dashboard-shell">
     <aside class="sidebar">
         <div class="brand">FTH</div>
-        <nav class="nav-section" aria-label="Admin dashboard">
-            {% for item in sections %}
+        <nav aria-label="Admin dashboard">
+            {% regroup sections by group as navigation_groups %}
+            {% for group in navigation_groups %}
+            <div class="nav-group" role="group" aria-labelledby="nav-{{ group.grouper }}">
+                <h2 class="nav-heading" id="nav-{{ group.grouper }}">{% if group.grouper == 'users' %}User records{% else %}Dashboard features{% endif %}</h2>
+                <div class="nav-section">
+            {% for item in group.list %}
                 {% if item.key == 'reports' %}
                     <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_reports' %}">{{ item.label }}</a>
                 {% elif item.key == 'farmers' %}
                     <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'farmers:dashboard' %}">{{ item.label }}</a>
                 {% elif item.key == 'code_requests' %}
-                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_code_requests' %}">{{ item.label }}{% if item.badge %}<span class="nav-badge" title="Farmers with pending reviews">{{ item.badge }}</span>{% endif %}</a>
+                    <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_verification_requests' %}">{{ item.label }}{% if item.badge %}<span class="nav-badge" title="Accounts with pending reviews">{{ item.badge }}</span>{% endif %}</a>
                 {% elif item.key == 'logistics' %}
                     <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'logistics:dashboard' %}">{{ item.label }}</a>
                 {% elif item.key == 'businesses' %}
@@ -50,6 +58,9 @@
                 {% elif item.key == 'audit_logs' %}
                     <a class="nav-link {% if section == item.key %}active{% endif %}" href="{% url 'dashboard_audit_logs' %}">{{ item.label }}</a>
                 {% endif %}
+            {% endfor %}
+                </div>
+            </div>
             {% endfor %}
         </nav>
     </aside>
@@ -72,5 +83,6 @@
         {% block content %}{% endblock %}
     </main>
 </div>
+<script src="{% static 'dashboard/filters.js' %}" defer></script>
 </body>
 </html>

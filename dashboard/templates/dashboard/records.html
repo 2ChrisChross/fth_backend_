@@ -143,7 +143,7 @@
         }
     </style>
 {% endblock %}
-{% block page_title %}{{ section_title }}{% endblock %}
+{% block page_title %}{% if local_simulator_enabled %}<a href="{% url 'local_simulator' section=section %}" style="color: inherit; text-decoration: none;" title="Open local app simulator">{{ section_title }}</a>{% else %}{{ section_title }}{% endif %}{% endblock %}
 {% block content %}
 
             {% if db_error %}
@@ -152,8 +152,9 @@
                 </div>
             {% else %}
                 <div class="search-form">
-                    <form method="get">
+                    <form method="get" data-auto-filter>
                         <input type="hidden" name="section" value="{{ section }}">
+                        <input type="hidden" name="status_filter" value="{{ status_filter }}">
                         <input type="text" name="q" value="{{ query }}" placeholder="Search records...">
 
                         <select name="sort_field">
@@ -182,7 +183,7 @@
                             <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
                         </select>
 
-                        <button class="btn btn-secondary" type="submit">Filter</button>
+                        <button class="btn btn-secondary" type="submit">Search</button>
                         {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' or status_filter != 'all' %}
                             <a class="btn btn-secondary" href="{{ dashboard_url }}">Clear</a>
                         {% endif %}

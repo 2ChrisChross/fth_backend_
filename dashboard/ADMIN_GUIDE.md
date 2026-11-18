@@ -20,6 +20,9 @@ then sign in to the custom dashboard at `/dashboard/login/`; the dashboard uses
 Django sessions and CSRF-protected POST forms. Do not create staff records in the
 farmer `USERS` table.
 
+The sidebar separates user records (Farmers, Logistics and Bulk Buyers) from
+dashboard features such as reports, verification requests and audit logs.
+
 Assign one or more groups to limit an account:
 
 | Group | Access |
@@ -44,6 +47,17 @@ responses. Codes are stored as hashes and expire 14 days after issuance.
 Recovery uses the same staff queue with purpose `recovery`. A valid recovery
 code grants full farmer JWT access, as configured for this API. Manual
 verification requires a reason and is limited to reviewers and superusers.
+
+The **Verification Requests** page combines farmer, bulk-buyer and logistics
+requests; filter by request type and status. The farmer code queue's view,
+review and issue permissions also govern these requests; application access and
+review permissions are both required to open submitted documents. Review, issue
+and mark mailed follow the same process.
+Staff with manual-verification permission can verify an account from its request
+detail after supplying a reason; the override is recorded in staff activity.
+
+Dashboard filter and sort dropdowns apply as soon as their selection changes.
+Use Search for text searches. A filter button appears if JavaScript is off.
 
 ## Production Checklist
 

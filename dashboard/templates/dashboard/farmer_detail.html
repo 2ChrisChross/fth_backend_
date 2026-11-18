@@ -32,6 +32,18 @@
             .farm-scroll { max-height: 60vh; }
             .farm-scroll table { min-width: 760px; }
         }
+        {% if active_view == 'farms' and farms %}
+        .dashboard-shell { height: 100vh; height: 100dvh; }
+        .main { display: flex; flex-direction: column; min-height: min-content; box-sizing: border-box; }
+        .topbar, .messages, .tabs, .filters, .pagination { flex-shrink: 0; }
+        .detail-panel { display: flex; flex-direction: column; flex: 1 1 0; min-height: min-content; box-sizing: border-box; }
+        .farm-scroll { flex: 1 1 0; min-height: 12rem; max-height: none; }
+        @media (max-width: 760px) {
+            .dashboard-shell { display: flex; flex-direction: column; }
+            .sidebar { flex: 0 0 auto; }
+            .main { flex: 1 0 0; }
+        }
+        {% endif %}
     </style>
 {% endblock %}
 {% block page_title %}{% if farmer %}Information on Farmer {{ farmer.username|default:farmer.user_id }}{% else %}Farmer Information{% endif %}{% endblock %}
@@ -78,7 +90,7 @@
                             <button type="button" class="button" data-delete-url="{% url 'farmers:delete' farmer.user_id %}" data-delete-name="{{ farmer.first_name }} {{ farmer.last_name }}">Delete Farmer</button>
                         {% endif %}
                         {% if can_view_code_requests %}
-                            <a class="button" href="{% url 'dashboard_code_requests' %}?farmer_id={{ farmer.user_id }}">View Code Requests</a>
+                            <a class="button" href="{% url 'dashboard_verification_requests' %}?type=farmers&amp;farmer_id={{ farmer.user_id }}">View Code Requests</a>
                         {% endif %}
                         {% if can_manually_verify and farmer.is_verified != 1 %}
                             <form method="post">
@@ -100,7 +112,7 @@
                                 {{ code_request.get_purpose_display }}: {{ code_request.get_status_display }}
                                 {% if code_request.requested_at %}({{ code_request.requested_at|date:"Y-m-d" }}){% endif %}
                                 {% if can_view_code_requests %}
-                                    <a href="{% url 'dashboard_code_requests' %}?farmer_id={{ farmer.user_id }}">Open queue</a>
+                                    <a href="{% url 'dashboard_verification_requests' %}?type=farmers&amp;farmer_id={{ farmer.user_id }}">Open queue</a>
                                 {% endif %}
                             </li>
                         {% empty %}
@@ -109,7 +121,7 @@
                     </ul>
                 </section>
             {% else %}
-                <form class="filters" method="get">
+                <form class="filters" method="get" data-auto-filter>
                     <input type="hidden" name="view" value="farms">
                     <label for="farm-search">Search address
                         <input id="farm-search" name="farm_search" value="{{ farm_search }}" placeholder="Barangay, municipality, province">
@@ -136,7 +148,7 @@
                             <option value="size_asc" {% if farm_sort == 'size_asc' %}selected{% endif %}>Smallest first</option>
                         </select>
                     </label>
-                    <button type="submit">Apply Filters</button>
+                    <button type="submit">Search</button>
                 </form>
 
                 {% if farms %}

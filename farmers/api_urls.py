@@ -1,5 +1,16 @@
 from django.urls import path
 
+from shared.farmer_messages import FarmerInboxView
+
+from .marketplace import (
+    CropsView,
+    CropTypesView,
+    FarmDetailView,
+    FarmerListingDetailView,
+    FarmerListingsView,
+    FarmerOrdersView,
+    FarmsView,
+)
 from .views import (
     FarmerTokenRefreshView,
     admin_code_request_detail,
@@ -30,6 +41,18 @@ urlpatterns = [
     path("token/refresh/", FarmerTokenRefreshView.as_view(), name="token_refresh"),
     path("logout/", logout_user, name="logout"),
     path("me/", farmer_profile, name="me"),
+    path("farms/", FarmsView.as_view(), name="farms"),
+    path("farms/<int:farm_id>/", FarmDetailView.as_view(), name="farm_detail"),
+    path("crop-types/", CropTypesView.as_view(), name="crop_types"),
+    path("crops/", CropsView.as_view(), name="crops"),
+    path("listings/", FarmerListingsView.as_view(), name="listings"),
+    path(
+        "listings/<int:listing_id>/",
+        FarmerListingDetailView.as_view(),
+        name="listing_detail",
+    ),
+    path("orders/", FarmerOrdersView.as_view(), name="orders"),
+    path("messages/", FarmerInboxView.as_view(), name="messages"),
     path("code-requests/", request_farmer_code, name="code_request"),
     path("recover/", recover_farmer_account, name="recover"),
     path(

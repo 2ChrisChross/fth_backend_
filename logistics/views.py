@@ -1,13 +1,13 @@
 from django.contrib.auth.hashers import make_password
 from django.db import IntegrityError, transaction
 from django.utils import timezone
-from django.utils.crypto import get_random_string
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from shared.audit import _log_audit_change, _serialize_model
-from shared.models import PhoneNumber, User
+from shared.code_workflows import verify_account_code
+from shared.models import AccountCodeRequest, PhoneNumber, User
 from shared.registration import (
     create_address,
     create_registration_documents,
@@ -59,9 +59,6 @@ def register(request):
                 first_name=data["first_name"],
                 middle_name=data.get("middle_name") or None,
                 last_name=data["last_name"],
-                verification_code=get_random_string(
-                    8, allowed_chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-                ),
             )
             PhoneNumber.objects.create(
                 user=user,
@@ -97,6 +94,7 @@ def register(request):
                     vehicle if document_type == "vehicle_photo" else None
                 ),
             )
+            AccountCodeRequest.objects.create(user=user, kind="logistics")
             _log_audit_change(
                 user=user,
                 action_type="CREATE",
@@ -121,20 +119,7 @@ def verify_code(request):
     data = request.data if isinstance(request.data, dict) else {}
     phone_number = str(data.get("phone_number") or "").strip()
     verification_code = str(data.get("verification_code") or "").strip()
-    role_id = resolve_enum_order_id("role", "Logistics_Manager")
-    if not phone_number or not verification_code or role_id is None:
-        return Response({"valid": False}, status=200)
-
-    users = User.objects.filter(
-        role=role_id, phone_numbers__mobile_number=phone_number
-    ).order_by("-user_id")
-    for user in users:
-        if (
-            user.verification_code
-            and user.verification_code.strip() == verification_code
-        ):
-            if user.is_verified != 1:
-                user.is_verified = 1
-                user.save(update_fields=["is_verified"])
-            return Response({"valid": True}, status=200)
-    return Response({"valid": False}, status=200)
+    return Response(
+        {"valid": verify_account_code(phone_number, verification_code, "logistics")},
+        status=200,
+    )

@@ -156,6 +156,8 @@ class FarmerRegistrationSerializer(serializers.Serializer):
     barangay = serializers.CharField(required=False, allow_blank=True)
     country = serializers.CharField(required=False, allow_blank=True)
     farm_country = serializers.CharField(required=False, allow_blank=True)
+    personal_gps_coordinates = serializers.CharField(max_length=255, required=False)
+    farm_gps_coordinates = serializers.CharField(max_length=255, required=False)
     documents = serializers.JSONField(required=False, allow_null=True)
     document_types = serializers.JSONField(required=False, allow_null=True)
     document_type = serializers.JSONField(required=False, allow_null=True)

@@ -122,6 +122,22 @@ class TripManifest(models.Model):
         db_table = "TRIP_MANIFESTS"
 
 
+class DeliveryAssignment(models.Model):
+    order = models.OneToOneField(
+        "api.Order", on_delete=models.CASCADE, related_name="delivery_assignment"
+    )
+    company = models.ForeignKey(
+        "LogisticsCompany", on_delete=models.PROTECT, related_name="assignments"
+    )
+    trip = models.ForeignKey(
+        "DeliveryTrip",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assignments",
+    )
+
+
 class VehicleStatusHistory(models.Model):
     history_id = models.AutoField(primary_key=True)
     vehicle = models.ForeignKey(

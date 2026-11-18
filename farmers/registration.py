@@ -47,7 +47,12 @@ def create_farmer_registration(data, request, staff_user=None):
 			"province": data.get("province") or "",
 			"postal_code": data.get("postal_code") or "",
 			"country": data.get("country") or "Philippines",
-			"gps_coordinates": data.get("farm_region") or data.get("region") or "",
+			"gps_coordinates": (
+				data.get("personal_gps_coordinates")
+				or data.get("farm_region")
+				or data.get("region")
+				or ""
+			),
 		},
 		"residence",
 	)
@@ -82,7 +87,7 @@ def create_farmer_registration(data, request, staff_user=None):
 			"province": data["farm_province"],
 			"postal_code": data["farm_postal_code"],
 			"country": data.get("farm_country") or "Philippines",
-			"gps_coordinates": data["farm_region"],
+			"gps_coordinates": data.get("farm_gps_coordinates") or data["farm_region"],
 		},
 		"farm",
 	)

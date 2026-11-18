@@ -1,0 +1,426 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block title %}{% if selected_farmer %}Farmer {{ selected_farmer.username|default:"details" }}{% else %}Local {{ section_title }}{% endif %} simulator{% endblock %}
+{% block page_title %}{% if selected_farmer %}Farmer simulator{% else %}Local {{ section_title }} simulator{% endif %}{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% url 'local_map_asset' asset='maplibre-gl.css' %}">
+<style>
+    .simulator { max-width: 1000px; }
+    .simulator details, .simulator .notice, .simulator .results {
+        background: white; border: 1px solid #d7dfe9; border-radius: 10px;
+        margin-bottom: 14px; padding: 16px;
+    }
+    .simulator summary { cursor: pointer; font-weight: 700; }
+    .simulator h2 { font-size: 1.05rem; margin-top: 20px; }
+    .simulator .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+    .simulator label { display: grid; gap: 5px; font-size: .9rem; }
+    .simulator input, .simulator select, .simulator textarea {
+        box-sizing: border-box; width: 100%; padding: 9px;
+        border: 1px solid #c7d0dc; border-radius: 5px; font: inherit;
+    }
+    .simulator fieldset { border: 1px solid #d7dfe9; margin: 16px 0; border-radius: 7px; }
+    .simulator .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .simulator .help { color: #536174; font-size: .9rem; }
+    .simulator .notice { border-left: 4px solid #bf8700; }
+    .simulator .error { color: #a11b1b; }
+    .simulator .record { border: 1px solid #d7dfe9; border-radius: 7px; padding: 10px; margin: 8px 0; overflow-wrap: anywhere; }
+    .simulator dl { display: grid; grid-template-columns: minmax(100px, 180px) 1fr; gap: 5px 12px; margin: 8px 0; }
+    .simulator dt { color: #536174; }
+    .simulator dd { margin: 0; }
+    .simulator button:focus-visible, .simulator input:focus-visible, .simulator select:focus-visible { outline: 3px solid #1d4fbf; }
+    .simulator .region3-map { height: 330px; margin-top: 12px; border: 1px solid #c7d0dc; }
+    .simulator .region3-picker .maplibregl-ctrl input { width: auto; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="simulator" id="simulator"
+     data-section="{{ section }}"
+     data-locations-url="{% static 'dashboard/region3_locations.json' %}"
+     data-tile-url="{% url 'local_map_tile' zoom=0 x=0 y=0 %}"
+     data-glyph-url="{% url 'local_map_glyph' fontstack='FONTSTACK' glyph_range='RANGE.pbf' %}"
+     data-lookup-url="{% url 'local_map_lookup' %}"
+     {% if section == "farmers" %}
+         {% if selected_farmer %}
+             data-farmer-id="{{ selected_farmer.user_id }}"
+             data-farmer-username="{{ selected_farmer.username|default_if_none:'' }}"
+             data-farmer-api-url="{% url 'local_simulator_farmer_api' farmer_id=selected_farmer.user_id action='me/' %}"
+         {% else %}
+             data-farmers-url="{% url 'local_simulator_farmers' %}"
+             data-farmer-detail-url="{% url 'local_simulator_farmer_detail' farmer_id=0 %}"
+         {% endif %}
+     {% endif %}
+     data-register-url="{% url 'local_simulator_register' section=section %}">
+    {% csrf_token %}
+    <div class="notice">
+        <strong>Local testing only.</strong> Actions write to your local database. Use test data.
+        Documents are URLs, not uploads. A staff member must review the request and issue
+        and mark the code mailed before verification. This is not the phone app or a payment system.
+    </div>
+    <div class="notice" id="sim-status" role="status" aria-live="polite">{% if selected_farmer %}You can manage this farmer's records.{% elif section == "farmers" %}Select a farmer to manage their records.{% else %}Not signed in.{% endif %}</div>
+
+    {% if selected_farmer %}
+    <div class="notice">
+        <a href="{% url 'local_simulator' section='farmers' %}">Back to registered farmers</a>
+        <p id="selected-farmer">Selected: {{ selected_farmer.username|default:"farmer" }} (ID {{ selected_farmer.user_id }}).</p>
+        <p class="help">Manage this farmer locally without their password. The separate login test uses their real credentials.</p>
+    </div>
+    {% elif section == "farmers" %}
+    <details open>
+        <summary>Registered farmers</summary>
+        <p class="help">Select a farmer to manage their records locally without their password, including farmers awaiting verification. The separate login test uses their real credentials.</p>
+        <form id="farmer-search-form" class="actions">
+            <label>Search by name or username <input name="q"></label>
+            <button type="submit">Search farmers</button>
+        </form>
+        <div id="farmer-list" aria-live="polite">Loading farmers...</div>
+        <div class="actions">
+            <button type="button" id="farmer-previous" disabled>Previous</button>
+            <span id="farmer-page"></span>
+            <button type="button" id="farmer-next" disabled>Next</button>
+        </div>
+    </details>
+    {% endif %}
+
+    {% if not selected_farmer %}
+    <details open>
+        <summary>Create an account</summary>
+        <form id="register-form">
+            <h2>Account details</h2>
+            <div class="actions">
+                <button type="button" id="generate-registration" disabled>Fill with random test data</button>
+                <button type="button" id="toggle-registration-password" aria-pressed="false">Show password</button>
+            </div>
+            <p class="help">This replaces the registration fields. Document URLs are fictional placeholders; copy the password before creating the account.</p>
+            <div class="grid">
+                <label>Username <input name="username" maxlength="150" required autocomplete="off"></label>
+                <label>Password <input name="password" type="password" required autocomplete="new-password"></label>
+                <label>First name <input name="first_name" required></label>
+                <label>Middle name <input name="middle_name"></label>
+                <label>Last name <input name="last_name" required></label>
+                {% if section != "farmers" %}<label>Date of birth <input name="date_of_birth" type="date" required></label>{% endif %}
+                <label>Phone number <input name="phone_number" required></label>
+                {% if section == "businesses" %}
+                    <label>Business name <input name="business_name" required></label>
+                {% elif section == "logistics" %}
+                    <label>Company name <input name="company_name" required></label>
+                    <label>Company phone <input name="company_phone" required></label>
+                    <label>Company email <input name="company_email" type="email" required></label>
+                {% endif %}
+            </div>
+            <fieldset><legend>Personal address</legend>
+                <div class="grid">
+                    {% if section == "farmers" %}
+                        <label>House number <input name="personal_house_number" required></label>
+                    {% endif %}
+                    <label>Street address <input name="personal_street_address" required></label>
+                    <label>Postal code <input name="personal_postal_code" required></label>
+                    <label>Country <input name="personal_country" value="Philippines" readonly></label>
+                </div>
+                {% include "dashboard/region3_picker.html" with prefix="personal_" required=True %}
+            </fieldset>
+            <fieldset><legend>{% if section == "farmers" %}Farm{% elif section == "businesses" %}Business{% else %}Company{% endif %} address</legend>
+                <div class="grid">
+                    {% if section == "farmers" %}
+                        <label>Farm size (hectares) <input name="farm_size" type="number" step="0.01" min="0" required></label>
+                        <label>House number <input name="organization_house_number" required></label>
+                    {% endif %}
+                    <label>Street address <input name="organization_street_address" required></label>
+                    <label>Postal code <input name="organization_postal_code" required></label>
+                    <label>Country <input name="organization_country" value="Philippines" readonly></label>
+                </div>
+                {% include "dashboard/region3_picker.html" with prefix="organization_" required=True %}
+            </fieldset>
+            {% if section == "logistics" %}
+                <fieldset><legend>First vehicle</legend>
+                    <div class="grid">
+                        <label>Model <input name="vehicle_model" required></label>
+                        <label>Plate number <input name="vehicle_plate_number" required></label>
+                        <label>Weight capacity (kg) <input name="vehicle_weight" type="number" step="0.01" min="0" required></label>
+                        <label>Volume capacity (m³) <input name="vehicle_volume" type="number" step="0.01" min="0" required></label>
+                        <label>Body type name <input name="vehicle_body_type" value="Other" required></label>
+                        <label>Refrigerated <select name="vehicle_refrigerated"><option value="false">No</option><option value="true">Yes</option></select></label>
+                    </div>
+                </fieldset>
+            {% endif %}
+            <fieldset><legend>Document URLs</legend>
+                <p class="help">Enter URLs for each required document. Files are not uploaded by this simulator.</p>
+                <div class="grid">
+                    {% if section == "farmers" %}
+                        <label>Utility bill URL <input type="url" name="doc_utility_bill" required></label>
+                        <label>Valid ID URL <input type="url" name="doc_valid_id" required></label>
+                        <label>Owner address URL <input type="url" name="doc_owner_address" required></label>
+                        <label>Farm ownership URL <input type="url" name="doc_farm_ownership" required></label>
+                    {% elif section == "businesses" %}
+                        <label>Birth certificate URL <input type="url" name="doc_birth_certificate" required></label>
+                        <label>Business utility bill URL <input type="url" name="doc_business_utility_bill" required></label>
+                        <label>Business permit URL <input type="url" name="doc_business_permit" required></label>
+                        <label>National ID URL <input type="url" name="doc_national_id" required></label>
+                    {% else %}
+                        <label>LTFRB franchise URL <input type="url" name="doc_ltfrb_franchise_for_trucking" required></label>
+                        <label>Vehicle photo URL <input type="url" name="doc_vehicle_photo" required></label>
+                        <label>Driver licence URL <input type="url" name="doc_vehicle_driver_license" required></label>
+                        <label>National ID URL <input type="url" name="doc_national_id" required></label>
+                        <label>Official receipt URL <input type="url" name="doc_official_receipt" required></label>
+                        <label>Certificate of registration URL <input type="url" name="doc_certificate_of_registration" required></label>
+                        <label>NBI clearance URL <input type="url" name="doc_nbi_clearance" required></label>
+                    {% endif %}
+                </div>
+            </fieldset>
+            <button type="submit">Create account</button>
+        </form>
+    </details>
+
+    <details open>
+        <summary>{% if section == "farmers" %}Verify and recover{% else %}Verify and sign in{% endif %}</summary>
+        <form id="verify-form">
+            <h2>Verify account</h2>
+            <p class="help">Enter the code issued and marked mailed in the admin verification queue.</p>
+            <div class="grid">
+                <label>Phone number <input name="phone_number" required></label>
+                <label>Verification code <input name="verification_code" required autocomplete="off"></label>
+            </div>
+            <div class="actions"><button type="submit">Verify</button></div>
+        </form>
+        <form id="code-request-form">
+            <h2>Request a {% if section == "farmers" %}verification or recovery{% else %}new verification{% endif %} code</h2>
+            <p class="help">A new request requires staff review. {% if section == "farmers" %}Use verification for unverified accounts and recovery for verified accounts.{% else %}Use this after a rejection or an expired code.{% endif %}</p>
+            <div class="grid">
+                {% if section == "farmers" %}
+                    <label>Phone number <input name="phone_number" required></label>
+                    <label>First name <input name="first_name" required></label>
+                    <label>Last name <input name="last_name" required></label>
+                    <label>Purpose <select name="purpose"><option value="verification">Verification</option><option value="recovery">Recovery</option></select></label>
+                {% else %}
+                    <label>Username <input name="username" required autocomplete="username"></label>
+                    <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+                {% endif %}
+            </div>
+            <div class="actions"><button type="submit">Request review</button></div>
+        </form>
+        {% if section == "farmers" %}
+        <form id="recover-form">
+            <h2>Recover account</h2>
+            <p class="help">Use a recovery code issued and marked mailed by staff.</p>
+            <div class="grid">
+                <label>Phone number <input name="phone_number" required></label>
+                <label>Recovery code <input name="verification_code" required autocomplete="off"></label>
+            </div>
+            <div class="actions"><button type="submit">Test account recovery</button></div>
+        </form>
+        {% endif %}
+        {% if section != "farmers" %}
+        <form id="login-form">
+            <h2>Sign in</h2>
+            <div class="grid">
+                <label>Username <input name="username" required autocomplete="username"></label>
+                <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+            </div>
+            <div class="actions"><button type="submit">Sign in</button><button type="button" id="refresh-token">Refresh session</button><button type="button" id="logout">Sign out</button></div>
+            <p class="help">Session tokens are held only while this page is open.</p>
+        </form>
+        {% endif %}
+    </details>
+    {% endif %}
+
+    {% if section != "farmers" or selected_farmer %}
+    <details>
+        <summary>Account profile</summary>
+        <div class="actions"><button type="button" data-get="me/">View profile</button></div>
+        <form id="profile-form">
+            <div class="grid">
+                <label>New username <input name="username"></label>
+                <label>First name <input name="first_name"></label>
+                <label>Middle name <input name="middle_name"></label>
+                <label>Last name <input name="last_name"></label>
+                <label>New password <input name="new_password" type="password" autocomplete="new-password"></label>
+            </div>
+            <div class="actions"><button type="submit">Update profile</button></div>
+            <p class="help">Blank fields are not changed. {% if section != "farmers" %}Changing the password signs out all sessions.{% endif %}</p>
+        </form>
+        {% if section == "farmers" %}
+        <form id="login-form">
+            <h2>Test farmer login</h2>
+            <p class="help">Tests the real login for the selected farmer. Only verified farmers can sign in; login is not needed to edit records here.</p>
+            <div class="grid">
+                <label>Selected username <input name="username" value="{{ selected_farmer.username|default_if_none:'' }}" required readonly autocomplete="username"></label>
+                <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+            </div>
+            <div class="actions"><button type="submit">Test login</button></div>
+        </form>
+        {% endif %}
+    </details>
+    {% endif %}
+
+    {% if section == "businesses" %}
+        <details>
+            <summary>Marketplace and orders</summary>
+            <div class="actions">
+                <button type="button" data-get="listings/">Browse listings</button>
+                <button type="button" data-get="delivery-companies/">Find delivery companies</button>
+                <button type="button" data-get="orders/">My orders</button>
+            </div>
+            <form id="order-form">
+                <h2>Reserve an order</h2>
+                <div class="grid">
+                    <label>Listing ID <input name="listing_id" type="number" min="1" required></label>
+                    <label>Quantity (kg) <input name="quantity_kg" type="number" min="0.01" step="0.01" required></label>
+                    <label>Delivery date (optional) <input name="delivery_date" type="date"></label>
+                    <label>Delivery company ID (optional) <input name="delivery_company_id" type="number" min="1"></label>
+                </div>
+                <div class="actions"><button type="submit">Place order</button></div>
+                <p class="help">This reserves stock but does not make a payment. Do not retry blindly.</p>
+            </form>
+            <form id="cancel-form">
+                <h2>Cancel an order</h2>
+                <div class="grid"><label>Order ID <input name="order_id" type="number" min="1" required></label></div>
+                <div class="actions"><button type="submit">Cancel order</button></div>
+            </form>
+        </details>
+    {% elif section == "logistics" %}
+        <details>
+            <summary>Vehicles</summary>
+            <div class="actions"><button type="button" data-get="vehicles/">My vehicles</button></div>
+            <form id="vehicle-form">
+                <h2>Add or update a vehicle</h2>
+                <p class="help">Leave vehicle ID blank to add. For an update, supply an ID and only fields to change. Body type is its configured ordering number.</p>
+                <div class="grid">
+                    <label>Vehicle ID (update only) <input name="vehicle_id" type="number" min="1"></label>
+                    <label>Model <input name="truck_model"></label>
+                    <label>Plate number <input name="plate_number"></label>
+                    <label>Weight capacity (kg) <input name="max_weight_capacity_kg" type="number" min="0.01" step="0.01"></label>
+                    <label>Volume capacity (m³) <input name="max_volume_capacity_m3" type="number" min="0.01" step="0.01"></label>
+                    <label>Body type number <input name="body_type" type="number" min="0" placeholder="1 for Other on a fresh database"></label>
+                    <label>Refrigerated <select name="is_refrigerated"><option value="">Not specified</option><option value="0">No</option><option value="1">Yes</option></select></label>
+                </div>
+                <div class="actions"><button type="submit">Save vehicle</button></div>
+            </form>
+            <form id="vehicle-delete-form">
+                <h2>Remove a vehicle</h2>
+                <div class="grid"><label>Vehicle ID <input name="vehicle_id" type="number" min="1" required></label></div>
+                <div class="actions"><button type="submit">Remove vehicle</button></div>
+            </form>
+        </details>
+        <details>
+            <summary>Deliveries and trips</summary>
+            <div class="actions">
+                <button type="button" data-get="deliveries/">Assigned deliveries</button>
+                <button type="button" data-get="trips/">My trips</button>
+            </div>
+            <form id="trip-form">
+                <h2>Plan a trip</h2>
+                <div class="grid">
+                    <label>Vehicle ID <input name="vehicle_id" type="number" min="1" required></label>
+                    <label>Order IDs, comma-separated <input name="order_ids" required placeholder="1, 2"></label>
+                    <label>Estimated arrival (optional) <input name="eta" type="datetime-local"></label>
+                </div>
+                <div class="actions"><button type="submit">Create trip</button></div>
+            </form>
+            <form id="trip-status-form">
+                <h2>Update trip</h2>
+                <div class="grid">
+                    <label>Trip ID <input name="trip_id" type="number" min="1" required></label>
+                    <label>Next status <select name="trip_status"><option value="2">In transit</option><option value="3">Completed</option></select></label>
+                </div>
+                <div class="actions"><button type="submit">Update trip</button></div>
+            </form>
+        </details>
+    {% elif selected_farmer %}
+        <details open>
+            <summary>Farms</summary>
+            <div class="actions"><button type="button" id="refresh-farms">Refresh farms</button></div>
+            <div id="farmer-farms" role="status" aria-live="polite">Loading farms...</div>
+            <form id="farm-form">
+                <h2>Add or update a farm</h2>
+                <p class="help">Leave the ID blank to add a farm with its address and confirmed pin. For an existing farm, check the box below only if replacing its address. Address changes do not alter pickup addresses on existing crop calendars or orders.</p>
+                <div class="grid">
+                    <label>Farm ID (update only) <input name="farm_id" type="number" min="1"></label>
+                    <label>Size (hectares) <input name="farm_size_hectares" type="number" min="0" step="0.01"></label>
+                </div>
+                <label><span><input type="checkbox" name="replace_address" value="yes" style="width:auto"> Replace address (updates only)</span></label>
+                <div class="grid">
+                    <label>Street address <input name="street_address"></label>
+                    <label>Postal code <input name="postal_code"></label>
+                    <label>Country <input name="country" value="Philippines" readonly></label>
+                </div>
+                {% include "dashboard/region3_picker.html" with prefix="" required=False %}
+                <p class="help" data-form-status role="status" aria-live="polite"></p>
+                <div class="actions"><button type="submit">Save farm</button></div>
+            </form>
+        </details>
+        <details open>
+            <summary>Crop listings</summary>
+            <div class="actions">
+                <button type="button" data-get="crop-types/">View crop types</button>
+                <button type="button" data-get="crops/">My crops</button>
+                <button type="button" id="refresh-listings">Refresh listings</button>
+            </div>
+            <div id="farmer-listings" role="status" aria-live="polite">Loading listings...</div>
+            <form id="farmer-listing-form">
+                <h2>Add or update a listing</h2>
+                <p class="help">To add a listing, choose an existing crop or a farm and crop type for a new crop. An existing crop keeps its current stock; update it separately after listing. For updates, provide the listing ID and only fields to change. Stock means currently available, unreserved kilograms; listings for the same crop share it. Deactivate rather than delete a listing.</p>
+                <div class="grid">
+                    <label>Listing ID (update only) <input name="listing_id" type="number" min="1"></label>
+                    <label>Existing crop ID (new listing) <input name="crop_id" type="number" min="1"></label>
+                    <label>Farm ID (new listing) <input name="farm_id" type="number" min="1"></label>
+                    <label>Crop type ID (new listing) <input name="crop_type_id" type="number" min="1"></label>
+                    <label>Batch number <input name="batch_number" maxlength="255"></label>
+                    <label>Title <input name="title" maxlength="255"></label>
+                    <label>Available stock (kg) <input name="available_stock_kg" type="number" min="0" step="0.01"></label>
+                    <label>Price per kg <input name="price_per_kg" type="number" min="0" step="0.01"></label>
+                    <label>Active <select name="is_active"><option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option></select></label>
+                </div>
+                <div class="actions"><button type="submit">Save listing</button></div>
+            </form>
+        </details>
+        <details>
+            <summary>Orders and messages</summary>
+            <p class="help">Orders show reservations created by the buyer API. Messages come from verified buyers and logistics managers.</p>
+            <div class="actions">
+                <button type="button" data-get="orders/">View orders</button>
+                <button type="button" data-get="messages/">View messages</button>
+            </div>
+        </details>
+        <details>
+            <summary>Requested documents</summary>
+            <p class="help">Use the farmer account credentials to view or submit additional documents, including before verification. Documents are URLs, not uploads.</p>
+            <form id="document-list-form">
+                <div class="grid">
+                    <label>Username <input name="username" value="{{ selected_farmer.username|default_if_none:'' }}" required autocomplete="username"></label>
+                    <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+                </div>
+                <div class="actions"><button type="submit">View requested documents</button></div>
+            </form>
+            <form id="document-submit-form">
+                <h2>Submit a requested document</h2>
+                <div class="grid">
+                    <label>Username <input name="username" value="{{ selected_farmer.username|default_if_none:'' }}" required autocomplete="username"></label>
+                    <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+                    <label>Request ID <input name="request_id" type="number" min="1" required></label>
+                    <label>Document URL <input name="file_url" type="url" required></label>
+                </div>
+                <div class="actions"><button type="submit">Submit document</button></div>
+            </form>
+        </details>
+    {% endif %}
+    {% if section != "farmers" %}
+        <details>
+            <summary>Message a farmer</summary>
+            <p class="help">Sign in as a verified account. Enter the recipient's farmer ID from the local Farmers simulator.</p>
+            <form id="farmer-message-form">
+                <div class="grid">
+                    <label>Farmer ID <input name="farmer_id" type="number" min="1" required></label>
+                    <label>Message <textarea name="body" maxlength="4000" required></textarea></label>
+                </div>
+                <div class="actions"><button type="submit">Send message</button></div>
+            </form>
+        </details>
+    {% endif %}
+    <div class="results" aria-live="polite">
+        <strong>Results</strong>
+        <div id="sim-results">Actions and records appear here.</div>
+    </div>
+</div>
+<script src="{% url 'local_map_asset' asset='maplibre-gl.js' %}" defer></script>
+<script src="{% static 'dashboard/region3_picker.js' %}" defer></script>
+<script src="{% static 'dashboard/simulator.js' %}" defer></script>
+{% endblock %}

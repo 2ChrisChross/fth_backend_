@@ -5,7 +5,6 @@ from django.core.exceptions import PermissionDenied
 from django.db import DatabaseError
 
 NAVIGATION_ITEMS = (
-    ("reports", "Reports", "farmers.view_dashboard_reports"),
     (
         "farmers",
         "Farmers",
@@ -14,15 +13,18 @@ NAVIGATION_ITEMS = (
             "farmers.manage_dashboard_records",
         ),
     ),
-    (
-        "code_requests",
-        "Farmer Code Requests",
-        "farmers.view_farmer_code_requests",
-    ),
     ("logistics", "Logistics", "farmers.manage_dashboard_records"),
     ("businesses", "Bulk Buyers", "farmers.manage_dashboard_records"),
+    ("reports", "Reports", "farmers.view_dashboard_reports"),
+    (
+        "code_requests",
+        "Verification Requests",
+        "farmers.view_farmer_code_requests",
+    ),
     ("audit_logs", "Audit Logs", "farmers.view_dashboard_audit_logs"),
 )
+
+USER_SECTIONS = {"farmers", "logistics", "businesses"}
 
 
 def has_dashboard_permission(user, permission):
@@ -50,15 +52,37 @@ def pending_code_request_farmer_count():
         return 0
 
 
+def pending_account_request_count():
+    from shared.models import AccountCodeRequest
+
+    try:
+        return (
+            AccountCodeRequest.objects.filter(
+                status=AccountCodeRequest.Status.PENDING_REVIEW
+            )
+            .values("user_id")
+            .distinct()
+            .count()
+        )
+    except DatabaseError:
+        return 0
+
+
 def dashboard_navigation(user):
     items = [
-        {"key": key, "label": label}
+        {
+            "key": key,
+            "label": label,
+            "group": "users" if key in USER_SECTIONS else "features",
+        }
         for key, label, permission in NAVIGATION_ITEMS
         if has_dashboard_permission(user, permission)
     ]
     for item in items:
         if item["key"] == "code_requests":
-            item["badge"] = pending_code_request_farmer_count()
+            item["badge"] = (
+                pending_code_request_farmer_count() + pending_account_request_count()
+            )
     return items
 
 

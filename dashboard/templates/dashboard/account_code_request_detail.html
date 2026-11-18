@@ -1,0 +1,92 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{{ kind_label }} Application | FTH Dashboard{% endblock %}
+{% block extra_head %}
+<style>
+    section { margin: 22px 0; }
+    table { width: 100%; max-width: 980px; border-collapse: collapse; background: white; }
+    th, td { padding: 11px; border-bottom: 1px solid #e5e9ef; text-align: left; }
+    th { width: 220px; background: #eef4ff; }
+</style>
+{% endblock %}
+{% block page_title %}{{ kind_label }} Application{% endblock %}
+{% block header_actions %}<a class="button" href="{% url 'dashboard_verification_requests' %}?type={{ kind|urlencode }}">Back to requests</a>{% endblock %}
+{% block content %}
+    <section>
+        <h2>Account</h2>
+        <table><tbody>
+            <tr><th>Request ID</th><td>{{ code_request.request_id }}</td></tr>
+            <tr><th>Name</th><td>{{ account.first_name }} {{ account.middle_name }} {{ account.last_name }}</td></tr>
+            <tr><th>Username</th><td>{{ account.username|default:"-" }}</td></tr>
+            <tr><th>Phone</th><td>{{ phone.mobile_number|default:"-" }}</td></tr>
+            <tr><th>Email</th><td>{{ email.email_address|default:"-" }}</td></tr>
+            <tr><th>Date of birth</th><td>{{ account.date_of_birth|date:"Y-m-d"|default:"-" }}</td></tr>
+            <tr><th>Personal address</th><td>{% include "dashboard/_account_address.html" with address=account.personal_address only %}</td></tr>
+            {% if account.deleted_at %}<tr><th>Account record</th><td>Deleted</td></tr>{% endif %}
+            <tr><th>Account verified</th><td>{{ account.is_verified|yesno:"Yes,No" }}</td></tr>
+            <tr><th>Purpose</th><td>Account verification</td></tr>
+            <tr><th>Status</th><td>{{ code_request.get_status_display }}</td></tr>
+            <tr><th>Review reason</th><td>{{ code_request.review_reason|default:"-" }}</td></tr>
+            <tr><th>Requested</th><td>{{ code_request.requested_at|date:"Y-m-d H:i" }}</td></tr>
+            <tr><th>Code expires</th><td>{{ code_request.code_expires_at|date:"Y-m-d H:i"|default:"-" }}</td></tr>
+        </tbody></table>
+    </section>
+    <section>
+        <h2>{% if kind == 'businesses' %}Buyer business{% else %}Logistics company{% endif %}</h2>
+        {% if organization %}
+            <table><tbody>
+                <tr><th>Name</th><td>{{ organization.business_name|default:"-" }}</td></tr>
+                <tr><th>Address</th><td>{% include "dashboard/_account_address.html" with address=organization.address only %}</td></tr>
+                {% if kind == 'logistics' %}
+                    <tr><th>Contact phone</th><td>{{ organization.contact_phone|default:"-" }}</td></tr>
+                    <tr><th>Contact email</th><td>{{ organization.contact_email|default:"-" }}</td></tr>
+                {% else %}
+                    <tr><th>Registration number</th><td>{{ organization.registration_number|default:"-" }}</td></tr>
+                    <tr><th>Applicant phone</th><td>{{ phone.mobile_number|default:"-" }}</td></tr>
+                {% endif %}
+            </tbody></table>
+        {% else %}<p>No active {% if kind == 'businesses' %}buyer business{% else %}logistics company{% endif %} record available.</p>{% endif %}
+    </section>
+    {% if kind == 'logistics' %}
+        <section>
+            <h2>Initial active vehicle</h2>
+            {% if vehicle %}
+                <table><tbody>
+                    <tr><th>Model</th><td>{{ vehicle.truck_model|default:"-" }}</td></tr>
+                    <tr><th>Plate number</th><td>{{ vehicle.plate_number|default:"-" }}</td></tr>
+                    <tr><th>Weight capacity (kg)</th><td>{{ vehicle.max_weight_capacity_kg|default_if_none:"-" }}</td></tr>
+                    <tr><th>Volume capacity (m³)</th><td>{{ vehicle.max_volume_capacity_m3|default_if_none:"-" }}</td></tr>
+                    <tr><th>Body type ID</th><td>{{ vehicle.body_type|default_if_none:"-" }}</td></tr>
+                    <tr><th>Refrigerated</th><td>{{ vehicle.is_refrigerated|yesno:"Yes,No,Unknown" }}</td></tr>
+                </tbody></table>
+            {% else %}<p>No active vehicle record available.</p>{% endif %}
+        </section>
+    {% endif %}
+    <section>
+        <h2>Submitted documents</h2>
+        <ul>
+            {% for document in documents %}
+                <li>{% if document.safe_file_url %}<a href="{{ document.safe_file_url }}" target="_blank" rel="noopener">{{ document.doc_title|default:"Document" }}</a>{% else %}{{ document.doc_title|default:"Document" }} (no safe file link){% endif %}</li>
+            {% empty %}<li>No submitted documents.</li>{% endfor %}
+        </ul>
+    </section>
+    <section>
+        <h2>Staff activity</h2>
+        <ul>
+            {% for event in audit_events %}
+                <li>{{ event.created_at|date:"Y-m-d H:i"|default:"-" }}: {{ event.label }} by {{ event.staff_user__username|default:"Unknown staff" }}</li>
+            {% empty %}<li>No staff activity recorded.</li>{% endfor %}
+        </ul>
+    </section>
+    {% if can_manually_verify and account.is_verified != 1 and not account.deleted_at %}
+        <section>
+            <h2>Manual verification</h2>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="manual_verify">
+                <label for="reason">Reason</label>
+                <input id="reason" name="reason" type="text" required>
+                <button type="submit">Verify account</button>
+            </form>
+        </section>
+    {% endif %}
+{% endblock %}

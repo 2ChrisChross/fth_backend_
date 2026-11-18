@@ -79,6 +79,81 @@ class User(models.Model):
         return False
 
 
+class AccountCodeRequest(models.Model):
+    class Kind(models.TextChoices):
+        BUSINESSES = "businesses", "Bulk buyer"
+        LOGISTICS = "logistics", "Logistics"
+
+    class Status(models.TextChoices):
+        PENDING_REVIEW = "pending_review", "Pending review"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        CODE_ISSUED = "code_issued", "Code issued"
+        MAILED = "mailed", "Mailed"
+        COMPLETED = "completed", "Completed"
+        EXPIRED = "expired", "Expired"
+
+    request_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="account_code_requests"
+    )
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING_REVIEW
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_account_code_requests",
+    )
+    review_reason = models.TextField(blank=True)
+    code_issued_at = models.DateTimeField(null=True, blank=True)
+    code_expires_at = models.DateTimeField(null=True, blank=True)
+    issued_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="issued_account_codes",
+    )
+    mailed_at = models.DateTimeField(null=True, blank=True)
+    mailed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mailed_account_codes",
+    )
+
+    class Meta:
+        db_table = "ACCOUNT_CODE_REQUESTS"
+        ordering = ["requested_at", "request_id"]
+
+
+class FarmerMessage(models.Model):
+    class SenderKind(models.TextChoices):
+        BUYER = "businesses", "Bulk buyer"
+        LOGISTICS = "logistics", "Logistics"
+
+    recipient = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="farmer_messages"
+    )
+    sender = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name="sent_farmer_messages"
+    )
+    sender_kind = models.CharField(max_length=20, choices=SenderKind.choices)
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "FARMER_MESSAGES"
+        ordering = ["-created_at", "-id"]
+
+
 class PhoneNumber(models.Model):
     phone_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(

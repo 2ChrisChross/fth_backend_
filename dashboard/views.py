@@ -37,6 +37,7 @@ from .services import (
     farmer_users,
 )
 from .services import dashboard_url as _dashboard_url
+from .simulator import simulator_allowed
 from .workflows import (
     DashboardWorkflowNotFound,
     DashboardWorkflowValidationError,
@@ -146,7 +147,9 @@ def farmer_code_requests(request):
             messages.error(request, str(exc))
         except FarmerWorkflowConflict as exc:
             messages.error(request, str(exc))
-        return redirect("dashboard_code_requests")
+        from .verification_views import return_to_unified_queue
+
+        return return_to_unified_queue(request) or redirect("dashboard_code_requests")
 
     code_requests = FarmerCodeRequest.objects.select_related("user").order_by(
         "requested_at"
@@ -390,6 +393,10 @@ def dashboard_users(request, section_override=None):
         "section_title": section_title,
         "dashboard_url": _dashboard_url(section),
         "sections": dashboard_navigation(request.user),
+        "local_simulator_enabled": (
+            section in ("farmers", "businesses", "logistics")
+            and simulator_allowed(request)
+        ),
     }
     if not database_ready_for_dashboard():
         context["db_error"] = (

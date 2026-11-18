@@ -50,6 +50,11 @@ class DashboardSidebarTests(SimpleTestCase):
         )
         badge.start()
         self.addCleanup(badge.stop)
+        badge = patch(
+            "dashboard.permissions.pending_account_request_count", return_value=0
+        )
+        badge.start()
+        self.addCleanup(badge.stop)
 
     def staff_request(self, path, data=None):
         request = self.factory.get(path, data)
@@ -116,6 +121,30 @@ class DashboardSidebarTests(SimpleTestCase):
         self.assertNotIn("<th>Location</th>", rendered)
         self.assertNotIn("Farm size</option>", rendered)
 
+    def test_text_filter_forms_keep_a_search_button(self):
+        records = get_template("dashboard/records.html").render(
+            {
+                "section": "farmers",
+                "section_title": "Farmers",
+                "sections": [],
+                "status_filter": "all",
+                "sort_field": "last_name",
+                "sort_dir": "asc",
+                "dashboard_url": "/dashboard/farmers/",
+            }
+        )
+        farms = get_template("dashboard/farmer_detail.html").render(
+            {
+                "sections": [],
+                "farmer": SimpleNamespace(username="farmer", user_id=1),
+                "active_view": "farms",
+            }
+        )
+        for html in (records, farms):
+            self.assertIn('type="submit">Search</button>', html)
+            self.assertNotIn('type="submit">Filter</button>', html)
+            self.assertNotIn('type="submit">Apply Filters</button>', html)
+
     @patch("dashboard.services.connection.introspection.table_names")
     def test_dashboard_database_readiness_uses_current_model_table_names(
         self, table_names
@@ -141,7 +170,7 @@ class DashboardSidebarTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Farmers")
-        self.assertContains(response, "Farmer Code Requests")
+        self.assertContains(response, "Verification Requests")
         self.assertContains(response, "Logistics")
         self.assertContains(response, "Bulk Buyers")
         self.assertContains(response, "Audit Logs")
@@ -233,6 +262,33 @@ class DashboardSidebarTests(SimpleTestCase):
 
         self.assertIn("Farmer Code Requests", rendered)
         self.assertIn('action="/dashboard/logout/"', rendered)
+
+    def test_sidebar_separates_user_records_from_features(self):
+        user = self.staff_request("/dashboard/").user
+        rendered = get_template("dashboard/base.html").render(
+            {"sections": dashboard_navigation(user), "section": "logistics"}
+        )
+        user_section, feature_section = rendered.split("Dashboard features", 1)
+        self.assertIn("User records", user_section)
+        for label in ("Farmers", "Logistics", "Bulk Buyers"):
+            self.assertIn(f">{label}</a>", user_section)
+        for label in ("Reports", "Verification Requests", "Audit Logs"):
+            self.assertIn(label, feature_section)
+            self.assertNotIn(f">{label}</a>", user_section)
+        self.assertIn('class="nav-link active" href="/dashboard/logistics/"', user_section)
+
+    def test_sidebar_hides_empty_groups_for_restricted_staff(self):
+        user = self.staff_request("/dashboard/").user
+        user.groups.exists.return_value = True
+        user.has_perm.side_effect = lambda permission: permission == (
+            "farmers.view_dashboard_reports"
+        )
+        rendered = get_template("dashboard/base.html").render(
+            {"sections": dashboard_navigation(user)}
+        )
+        self.assertIn("Dashboard features", rendered)
+        self.assertNotIn("User records", rendered)
+        self.assertNotIn("Bulk Buyers", rendered)
 
     def test_dashboard_templates_compile(self):
         for template_name in (
@@ -341,6 +397,11 @@ class AuditLogReasonTests(SimpleTestCase):
     def setUp(self):
         badge = patch(
             "dashboard.permissions.pending_code_request_farmer_count", return_value=0
+        )
+        badge.start()
+        self.addCleanup(badge.stop)
+        badge = patch(
+            "dashboard.permissions.pending_account_request_count", return_value=0
         )
         badge.start()
         self.addCleanup(badge.stop)
@@ -549,8 +610,11 @@ class DashboardPermissionTests(SimpleTestCase):
             ["reports", "audit_logs"],
         )
 
+    @patch("dashboard.permissions.pending_account_request_count", return_value=2)
     @patch("dashboard.permissions.pending_code_request_farmer_count", return_value=3)
-    def test_code_requests_navigation_carries_pending_farmer_badge(self, count):
+    def test_code_requests_navigation_carries_combined_pending_badge(
+        self, count, accounts
+    ):
         user = SimpleNamespace(
             is_authenticated=True,
             is_active=True,
@@ -560,9 +624,10 @@ class DashboardPermissionTests(SimpleTestCase):
 
         items = {item["key"]: item for item in dashboard_navigation(user)}
 
-        self.assertEqual(items["code_requests"]["badge"], 3)
+        self.assertEqual(items["code_requests"]["badge"], 5)
         self.assertNotIn("badge", items["reports"])
         count.assert_called_once_with()
+        accounts.assert_called_once_with()
 
     @patch("dashboard.permissions.pending_code_request_farmer_count")
     def test_badge_is_not_queried_without_code_request_access(self, count):

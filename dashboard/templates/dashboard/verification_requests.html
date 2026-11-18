@@ -1,0 +1,98 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Verification Requests | FTH Dashboard{% endblock %}
+{% block page_title %}Verification Requests{% endblock %}
+{% block extra_head %}
+<style>
+    .toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 18px 0; }
+    .toolbar label { display: grid; gap: 5px; }
+    input, select { padding: 8px 10px; font: inherit; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { padding: 12px; border-bottom: 1px solid #e5e9ef; text-align: left; vertical-align: top; }
+    th { background: #eef4ff; }
+    .actions form { display: flex; flex-wrap: wrap; gap: 6px; min-width: 220px; }
+    .pagination { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+</style>
+{% endblock %}
+{% block content %}
+    {% if farmer_id %}
+        <p>Requests for farmer #{{ farmer_id }} <a href="{% url 'dashboard_verification_requests' %}?type=farmers">Clear</a></p>
+    {% endif %}
+    {% for issued_code in issued_codes %}
+        <div class="messages warning" role="alert">
+            <strong>Mail this one-time code for {% if issued_code.kind == 'farmers' %}farmer{% elif issued_code.kind == 'businesses' %}bulk buyer{% else %}logistics{% endif %} request #{{ issued_code.request_id }}:</strong> {{ issued_code.code }}
+            <span>Expires {{ issued_code.expires_at }}.</span>
+        </div>
+    {% endfor %}
+    {% if error %}<div class="messages error">{{ error }}</div>{% endif %}
+    <form class="toolbar" method="get" data-auto-filter>
+        {% if farmer_id %}<input type="hidden" name="farmer_id" value="{{ farmer_id }}">{% endif %}
+        <label for="request-type">Request type
+            <select id="request-type" name="type">
+                <option value="all" {% if selected_type == 'all' %}selected{% endif %}>All</option>
+                <option value="farmers" {% if selected_type == 'farmers' %}selected{% endif %}>Farmer</option>
+                <option value="businesses" {% if selected_type == 'businesses' %}selected{% endif %}>Bulk buyer</option>
+                <option value="logistics" {% if selected_type == 'logistics' %}selected{% endif %}>Logistics</option>
+            </select>
+        </label>
+        <label for="status">Status
+            <select id="status" name="status">
+                <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All</option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <noscript><button type="submit">Apply filters</button></noscript>
+    </form>
+    {% if not error %}
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Requested</th><th>Type</th><th>Account</th><th>Phone</th><th>Purpose</th><th>Status</th><th>Code expiry</th><th>Actions</th></tr></thead>
+                <tbody>
+                {% for item in code_requests %}
+                    <tr>
+                        <td>{{ item.requested_at|date:"Y-m-d H:i" }}</td>
+                        <td>{% if item.queue_kind == 'farmers' %}Farmer{% elif item.queue_kind == 'businesses' %}Bulk buyer{% else %}Logistics{% endif %}</td>
+                        <td>
+                            {% if item.queue_kind == 'farmers' and can_view_farmer_detail %}
+                                <a href="{% url 'dashboard_code_request_detail' item.request_id %}">{{ item.user.first_name }} {{ item.user.last_name }}</a>
+                            {% elif item.queue_kind != 'farmers' and can_view_account_detail %}
+                                <a href="{% url 'dashboard_account_code_request_detail' item.queue_kind item.request_id %}">{{ item.user.first_name }} {{ item.user.last_name }}</a>
+                            {% else %}{{ item.user.first_name }} {{ item.user.last_name }}{% endif %}
+                        </td>
+                        <td>{{ item.phone_number|default:"-" }}</td>
+                        <td>{% if item.queue_kind == 'farmers' %}{{ item.get_purpose_display }}{% else %}Account verification{% endif %}</td>
+                        <td>{{ item.get_status_display }}</td>
+                        <td>{{ item.code_expires_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                        <td class="actions">
+                            {% if item.status == 'pending_review' and can_review or item.status == 'approved' and can_issue or item.status == 'code_issued' and can_issue %}
+                                <form method="post" action="{% if item.queue_kind == 'farmers' %}{% url 'dashboard_code_requests' %}{% else %}{% url 'dashboard_account_code_requests' item.queue_kind %}{% endif %}?queue=unified&amp;type={{ selected_type|urlencode }}&amp;status={{ selected_status|urlencode }}{% if farmer_id %}&amp;farmer_id={{ farmer_id|urlencode }}{% endif %}&amp;page={{ page_obj.number }}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="request_id" value="{{ item.request_id }}">
+                                    {% if item.status == 'pending_review' %}
+                                        <input name="reason" type="text" placeholder="Rejection reason" aria-label="Rejection reason">
+                                        <button name="action" value="approve" type="submit">Approve</button>
+                                        <button name="action" value="reject" type="submit">Reject</button>
+                                    {% elif item.status == 'approved' %}
+                                        <button name="action" value="issue" type="submit">Issue code</button>
+                                    {% else %}
+                                        <button name="action" value="mark_mailed" type="submit">Mark mailed</button>
+                                    {% endif %}
+                                </form>
+                            {% else %}No action{% endif %}
+                        </td>
+                    </tr>
+                {% empty %}<tr><td colspan="8">No code requests found.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="pagination" aria-label="Pagination">
+                <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_previous %}<a href="?type={{ selected_type|urlencode }}&amp;status={{ selected_status|urlencode }}{% if farmer_id %}&amp;farmer_id={{ farmer_id|urlencode }}{% endif %}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+                {% if page_obj.has_next %}<a href="?type={{ selected_type|urlencode }}&amp;status={{ selected_status|urlencode }}{% if farmer_id %}&amp;farmer_id={{ farmer_id|urlencode }}{% endif %}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+            </nav>
+        {% endif %}
+    {% endif %}
+{% endblock %}

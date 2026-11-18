@@ -29,3 +29,24 @@ class BulkBuyer(models.Model):
         db_table = "BULK_BUYERS"
         verbose_name = "bulk buyer"
         verbose_name_plural = "bulk buyers"
+
+
+class OrderReservation(models.Model):
+    class Status(models.TextChoices):
+        RESERVED = "reserved", "Reserved"
+        CANCELLED = "cancelled", "Cancelled"
+        DELIVERED = "delivered", "Delivered"
+
+    order = models.OneToOneField(
+        "api.Order", on_delete=models.CASCADE, related_name="reservation"
+    )
+    crop = models.ForeignKey("farmers.Crop", on_delete=models.PROTECT)
+    pickup_address = models.ForeignKey(
+        "api.Address", on_delete=models.PROTECT, null=True, related_name="+"
+    )
+    destination_address = models.ForeignKey(
+        "api.Address", on_delete=models.PROTECT, null=True, related_name="+"
+    )
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.RESERVED
+    )

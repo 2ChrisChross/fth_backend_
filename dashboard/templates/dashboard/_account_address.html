@@ -1,0 +1,6 @@
+{% if address %}
+    {{ address.street_address|default:"-" }}<br>
+    {{ address.barangay|default:"-" }}, {{ address.municipality_city|default:"-" }}<br>
+    {{ address.province|default:"-" }} {{ address.postal_code|default:"" }}<br>
+    {{ address.country|default:"-" }}
+{% else %}Not available{% endif %}
