@@ -355,9 +355,10 @@
             <summary>Crop listings</summary>
             <div class="actions">
                 <button type="button" data-get="crop-types/">View crop types</button>
-                <button type="button" data-get="crops/">My crops</button>
+                <button type="button" id="refresh-crops">My crops</button>
                 <button type="button" id="refresh-listings">Refresh listings</button>
             </div>
+            <div id="farmer-crops" role="status" aria-live="polite" hidden></div>
             <div id="farmer-listings" role="status" aria-live="polite">Loading listings...</div>
             <form id="farmer-listing-form">
                 <h2>Add or update a listing</h2>

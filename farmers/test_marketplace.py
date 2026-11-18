@@ -152,6 +152,8 @@ class FarmerMarketplaceTests(TestCase):
         )
         response = farmer.post("/api/farmers/listings/", payload, format="json")
         self.assertEqual(response.status_code, 201, response.data)
+        crop_ids = [crop["crop_id"] for crop in farmer.get("/api/farmers/crops/").data]
+        self.assertIn(response.data["crop_id"], crop_ids)
         listing_id = response.data["listing_id"]
         listing_url = f"/api/farmers/listings/{listing_id}/"
         self.assertEqual(

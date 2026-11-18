@@ -189,6 +189,8 @@ class SimulatorAccessTests(SimpleTestCase):
         self.assertIn("Test farmer login", html)
         self.assertIn('id="farmer-farms"', html)
         self.assertIn('id="farmer-listings"', html)
+        self.assertIn('id="farmer-crops"', html)
+        self.assertIn('id="refresh-crops"', html)
         self.assertIn('id="refresh-farms"', html)
         self.assertIn('id="refresh-listings"', html)
         self.assertIn('data-action="add"', html)

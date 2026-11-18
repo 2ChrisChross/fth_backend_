@@ -244,11 +244,11 @@
         if (existingCrop) form.elements.available_stock_kg.value = "";
     }
 
-    const collectionGeneration = {farms: 0, listings: 0};
+    const collectionGeneration = {farms: 0, crops: 0, listings: 0};
 
     async function loadFarmerCollection(kind) {
         const generation = ++collectionGeneration[kind];
-        const list = document.getElementById(kind === "farms" ? "farmer-farms" : "farmer-listings");
+        const list = document.getElementById(`farmer-${kind}`);
         list.textContent = `Loading ${kind}...`;
         list.setAttribute("aria-busy", "true");
         try {
@@ -298,6 +298,12 @@
 
     if (selectedFarmer) {
         document.getElementById("farmer-listing-form").elements.crop_id.addEventListener("input", updateListingStockInput);
+        handleButton("refresh-crops", async () => {
+            document.getElementById("farmer-crops").hidden = false;
+            const loaded = await loadFarmerCollection("crops");
+            if (loaded === true) setStatus("Crops loaded.");
+            else if (loaded === false) setStatus("Could not load crops. See the crop list.", true);
+        });
         for (const kind of ["farms", "listings"]) {
             handleButton(`refresh-${kind}`, async () => {
                 if (await loadFarmerCollection(kind)) setStatus(`${kind === "farms" ? "Farms" : "Listings"} refreshed.`);
@@ -638,8 +644,12 @@
         if (!Object.keys(payload).length) throw new Error("Enter at least one listing field.");
         show(await api(id ? `listings/${id}/` : "listings/", id ? "PATCH" : "POST", payload));
         setStatus(id ? "Listing updated." : "Listing created.");
-        if (await loadFarmerCollection("listings") === false) {
-            setStatus("Listing saved, but the crop listings could not be refreshed.", true);
+        const refreshes = [loadFarmerCollection("listings")];
+        if (!document.getElementById("farmer-crops").hidden) {
+            refreshes.push(loadFarmerCollection("crops"));
+        }
+        if ((await Promise.all(refreshes)).includes(false)) {
+            setStatus("Listing saved, but some lists could not be refreshed.", true);
         }
     });
 
