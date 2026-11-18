@@ -388,6 +388,26 @@
                 <p class="help" data-form-status role="status" aria-live="polite"></p>
                 <div class="actions"><button type="submit">Add expense</button><button type="button" id="view-listing-expenses">View expenses</button></div>
             </form>
+            <form id="listing-calendar-form">
+                <h2>Listing crop schedule</h2>
+                <p class="help">Load a listing's schedule before editing. Dates are optional; changing this schedule does not change existing orders or other listings. The dashboard may show Delivered when the planned delivery date arrives; this does not confirm an actual delivery.</p>
+                <div class="grid">
+                    <label>Listing ID <input name="listing_id" type="number" min="1" required></label>
+                    <label>Land preparation start <input name="land_preparation_start" type="date"></label>
+                    <label>Land preparation end <input name="land_preparation_end" type="date"></label>
+                    <label>Planting start <input name="planting_start" type="date"></label>
+                    <label>Planting end <input name="planting_end" type="date"></label>
+                    <label>Harvesting start <input name="harvesting_start" type="date"></label>
+                    <label>Harvesting end <input name="harvesting_end" type="date"></label>
+                    <label>Packing duration (days) <input name="packing_duration_days" type="number" min="0" max="32767" step="1"></label>
+                    <label>Expected quantity (kg) <input name="expected_quantity_kg" type="number" min="0" step="0.01"></label>
+                    <label>Actual harvest (kg) <input name="actual_harvested_kg" type="number" min="0" step="0.01"></label>
+                    <label>Preorder lead time (days) <input name="preorder_lead_time_days" type="number" min="0" max="32767" step="1"></label>
+                    <label>Planned delivery date <input name="delivery_date" type="date"></label>
+                </div>
+                <p class="help" data-form-status role="status" aria-live="polite">Enter a listing ID and load its schedule.</p>
+                <div class="actions"><button type="button" id="load-listing-calendar">Load schedule</button><button type="submit">Save schedule</button></div>
+            </form>
         </details>
         <details>
             <summary>Orders and messages</summary>
@@ -439,5 +459,5 @@
 </div>
 <script src="{% url 'local_map_asset' asset='maplibre-gl.js' %}" defer></script>
 <script src="{% static 'dashboard/region3_picker.js' %}" defer></script>
-<script src="{% static 'dashboard/simulator.js' %}" defer></script>
+<script src="{% static 'dashboard/simulator.js' %}?v=listing-calendar-1" defer></script>
 {% endblock %}

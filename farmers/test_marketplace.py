@@ -9,9 +9,16 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from farmers.models import Crop, CropCalendar, CropType, Farm, ListingOperatingExpense
+from farmers.models import (
+    Crop,
+    CropCalendar,
+    CropType,
+    Farm,
+    ListingOperatingExpense,
+    MarketplaceListing,
+)
 from logistics.models import LogisticsCompany, Vehicle
-from shared.models import Address, User
+from shared.models import Address, OrderItem, User
 from shared.registration import resolve_enum_order_id
 
 RUN_DATABASE_TESTS = os.environ.get("FTH_DATABASE_TESTS") == "1"
@@ -307,9 +314,11 @@ class FarmerMarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("crop type", str(response.data))
 
-    def test_existing_crop_can_be_listed_using_its_calendar(self):
+    def test_existing_crop_listing_gets_its_own_copy_of_calendar(self):
         farmer = self.login("farmers", self.farmer)
         other = self.login("farmers", self.other)
+        self.old_calendar.packing_duration_days = 4
+        self.old_calendar.save(update_fields=["packing_duration_days"])
         crops = farmer.get("/api/farmers/crops/").data
         self.assertEqual([crop["crop_id"] for crop in crops], [self.old_crop.pk])
         payload = self.listing_payload()
@@ -324,7 +333,17 @@ class FarmerMarketplaceTests(TestCase):
         response = farmer.post("/api/farmers/listings/", payload, format="json")
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data["crop_id"], self.old_crop.pk)
-        self.assertEqual(response.data["calendar_id"], self.old_calendar.pk)
+        self.assertNotEqual(response.data["calendar_id"], self.old_calendar.pk)
+        self.assertEqual(
+            CropCalendar.objects.get(pk=response.data["calendar_id"]).pickup_address_id,
+            self.old_calendar.pickup_address_id,
+        )
+        self.assertEqual(
+            CropCalendar.objects.get(
+                pk=response.data["calendar_id"]
+            ).packing_duration_days,
+            4,
+        )
         self.old_crop.refresh_from_db()
         self.assertIsNone(self.old_crop.available_stock_kg)
         payload["available_stock_kg"] = "20"
@@ -338,6 +357,107 @@ class FarmerMarketplaceTests(TestCase):
             farmer.post("/api/farmers/listings/", payload, format="json").status_code,
             400,
         )
+
+    def test_listing_schedule_preserves_shared_calendars_and_orders(self):
+        farmer = self.login("farmers", self.farmer)
+        other = self.login("farmers", self.other)
+        self.old_calendar.calendar_status = 2
+        self.old_calendar.save(update_fields=["calendar_status"])
+        first = MarketplaceListing.objects.create(
+            crop=self.old_crop, calendar=self.old_calendar
+        )
+        second = MarketplaceListing.objects.create(
+            crop=self.old_crop, calendar=self.old_calendar
+        )
+        item = OrderItem.objects.create(calendar=self.old_calendar)
+        url = f"/api/farmers/listings/{first.pk}/calendar/"
+        self.assertEqual(other.get(url).status_code, 404)
+        self.assertEqual(
+            other.patch(url, {"planting_start": "2027-01-02"}, format="json").status_code,
+            404,
+        )
+        self.assertEqual(farmer.get(url).data["calendar_id"], self.old_calendar.pk)
+        response = farmer.patch(
+            url,
+            {
+                "land_preparation_start": "2027-01-01",
+                "land_preparation_end": "2027-01-05",
+                "planting_start": "2027-01-06",
+                "planting_end": "2027-01-07",
+                "harvesting_start": "2027-03-01",
+                "harvesting_end": "2027-03-02",
+                "packing_duration_days": 3,
+                "expected_quantity_kg": "25.50",
+                "actual_harvested_kg": "20.00",
+                "preorder_lead_time_days": 7,
+                "delivery_date": "2027-03-06",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        item.refresh_from_db()
+        self.old_calendar.refresh_from_db()
+        self.assertNotEqual(first.calendar_id, self.old_calendar.pk)
+        self.assertEqual(second.calendar_id, self.old_calendar.pk)
+        self.assertEqual(item.calendar_id, self.old_calendar.pk)
+        self.assertIsNone(self.old_calendar.planting_start)
+        self.assertEqual(self.old_calendar.calendar_status, 2)
+        self.assertIsNone(first.calendar.calendar_status)
+        self.assertEqual(
+            first.calendar.pickup_address_id, self.old_calendar.pickup_address_id
+        )
+        self.assertEqual(response.data["expected_quantity_kg"], "25.50")
+        previous_id = first.calendar_id
+        response = farmer.patch(url, {"planting_end": None}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(response.data["planting_end"])
+        self.assertEqual(response.data["calendar_id"], previous_id)
+        self.assertEqual(
+            farmer.patch(url, {"planting_end": "2027-01-01"}, format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            farmer.patch(url, {"packing_duration_days": -1}, format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            farmer.patch(url, {"expected_quantity_kg": "-1"}, format="json").status_code,
+            400,
+        )
+        self.assertEqual(farmer.patch(url, {}, format="json").status_code, 400)
+        self.old_crop.refresh_from_db()
+        self.assertIsNone(self.old_crop.available_stock_kg)
+
+    def test_listing_schedule_preserves_orders_without_other_listings(self):
+        farmer = self.login("farmers", self.farmer)
+        listing = MarketplaceListing.objects.create(
+            crop=self.old_crop, calendar=self.old_calendar
+        )
+        item = OrderItem.objects.create(calendar=self.old_calendar)
+        response = farmer.patch(
+            f"/api/farmers/listings/{listing.pk}/calendar/",
+            {"planting_start": "2027-01-02"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        item.refresh_from_db()
+        self.old_calendar.refresh_from_db()
+        self.assertEqual(item.calendar_id, self.old_calendar.pk)
+        self.assertIsNone(self.old_calendar.planting_start)
+        self.assertNotEqual(response.data["calendar_id"], self.old_calendar.pk)
+
+    def test_listing_schedule_initializes_missing_calendar(self):
+        farmer = self.login("farmers", self.farmer)
+        listing = MarketplaceListing.objects.create(crop=self.old_crop)
+        url = f"/api/farmers/listings/{listing.pk}/calendar/"
+        self.assertIsNone(farmer.get(url).data["calendar_id"])
+        response = farmer.patch(url, {"harvesting_start": "2027-05-01"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        listing.refresh_from_db()
+        self.assertEqual(listing.calendar_id, response.data["calendar_id"])
+        self.assertEqual(listing.calendar.pickup_address_id, self.farm.address_id)
 
     def test_farmer_order_shows_delivery_progress(self):
         farmer = self.login("farmers", self.farmer)
@@ -542,6 +662,20 @@ class FarmerMarketplaceTests(TestCase):
         )
         self.assertEqual(response.status_code, 201, response.content)
         listing_id = response.json()["listing_id"]
+        calendar_url = base + f"listings/{listing_id}/calendar/"
+        scheduled = self.client.patch(
+            calendar_url,
+            {"planting_start": "2027-01-02"},
+            content_type="application/json",
+        )
+        self.assertEqual(scheduled.status_code, 200, scheduled.content)
+        self.assertEqual(
+            self.client.get(calendar_url).json()["planting_start"], "2027-01-02"
+        )
+        self.assertEqual(
+            self.client.get(pending + f"listings/{listing_id}/calendar/").status_code,
+            404,
+        )
         expense_url = base + f"listings/{listing_id}/expenses/"
         expense = self.client.post(
             expense_url,
@@ -600,6 +734,18 @@ class FarmerMarketplaceTests(TestCase):
         expense_url = (
             f"/dashboard/local-test/farmers/{self.farmer.pk}/api/"
             "listings/1/expenses/"
+        )
+        calendar_url = (
+            f"/dashboard/local-test/farmers/{self.farmer.pk}/api/"
+            "listings/1/calendar/"
+        )
+        self.assertEqual(
+            client.patch(
+                calendar_url,
+                {"planting_start": "2027-01-02"},
+                content_type="application/json",
+            ).status_code,
+            403,
         )
         self.assertEqual(
             client.post(

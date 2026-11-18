@@ -10,6 +10,7 @@ from .marketplace import (
     FarmerListingsView,
     FarmerOrdersView,
     FarmsView,
+    ListingCalendarView,
     ListingExpensesView,
 )
 from .views import (
@@ -47,6 +48,11 @@ urlpatterns = [
     path("crop-types/", CropTypesView.as_view(), name="crop_types"),
     path("crops/", CropsView.as_view(), name="crops"),
     path("listings/", FarmerListingsView.as_view(), name="listings"),
+    path(
+        "listings/<int:listing_id>/calendar/",
+        ListingCalendarView.as_view(),
+        name="listing_calendar",
+    ),
     path(
         "listings/<int:listing_id>/expenses/",
         ListingExpensesView.as_view(),

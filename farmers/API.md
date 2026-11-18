@@ -222,8 +222,8 @@ access token. Each endpoint limits results and changes to that farmer's records.
   ```
 
   Alternatively, replace `farm_id` and `crop_type_id` with an owned `crop_id`
-  to list an existing crop. Its most recent calendar is reused, or a new one
-  is created if needed. Omit `available_stock_kg` when listing an existing
+  to list an existing crop. Its most recent calendar is copied as the initial
+  schedule, or a new calendar is created if needed. Omit `available_stock_kg` when listing an existing
   crop; its stock remains unchanged. Stock is shared by all listings for the
   crop and can be changed separately through a listing update. The batch
   number is optional. A new
@@ -233,6 +233,20 @@ access token. Each endpoint limits results and changes to that farmer's records.
   `available_stock_kg`, `price_per_kg`, and `is_active`. Stock is the remaining
   **unreserved** quantity; changing it does not alter existing reservations.
   Deactivate a listing to remove it from the buyer marketplace.
+- `GET listings/<listing_id>/calendar/` reads the listing's schedule.
+  `PATCH` accepts any subset of `land_preparation_start`, `land_preparation_end`,
+  `planting_start`, `planting_end`, `harvesting_start`, `harvesting_end`,
+  `packing_duration_days`, `expected_quantity_kg`, `actual_harvested_kg`,
+  `preorder_lead_time_days`, and `delivery_date`. Dates use `YYYY-MM-DD`;
+  fields can be cleared with `null`, durations and quantities must be
+  non-negative, and each end date must be on or after its corresponding start.
+  Scheduling resets the stored manual stage so dashboard stage calculation uses
+  dates. The dashboard's crop-level stage uses the crop's most recently created
+  calendar. The delivery date is planned; the existing stage calculation calls
+  it delivered once that date arrives, not as confirmation of an actual delivery.
+  If the calendar is shared by other listings or referenced by an order, a copy
+  is made before updating it, preserving the other listing and past order.
+  Harvest quantities are informational and do not change marketplace stock.
 - `GET listings/<listing_id>/expenses/` lists operating expenses for a listing
   of an active crop on the farmer's active farm. `POST` to the same path adds an expense, for
   example `{"tag": "Fertilizer", "amount": "500.00"}`. Tags are free text,

@@ -25,6 +25,7 @@ from farmers.marketplace import (
     FarmerListingsView,
     FarmerOrdersView,
     FarmsView,
+    ListingCalendarView,
     ListingExpensesView,
 )
 from farmers.views import farmer_profile
@@ -278,6 +279,11 @@ def simulator_farmer_api(request, farmer_id, action):
     }
     view = views.get(action)
     kwargs = {}
+    if view is None:
+        calendar_match = re.fullmatch(r"listings/([1-9][0-9]*)/calendar/", action)
+        if calendar_match:
+            view = ListingCalendarView
+            kwargs["listing_id"] = int(calendar_match.group(1))
     if view is None:
         expense_match = re.fullmatch(r"listings/([1-9][0-9]*)/expenses/", action)
         if expense_match:

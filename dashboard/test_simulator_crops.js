@@ -35,7 +35,7 @@ class Element {
 
 function setup() {
     const elements = {};
-    const state = {crops: [], failCrops: false, listingError: null, requests: []};
+    const state = {crops: [], failCrops: false, listingError: null, malformedCalendar: false, requests: []};
     function element(id) {
         return (elements[id] = new Element());
     }
@@ -65,7 +65,8 @@ function setup() {
     root.querySelector = () => ({value: "csrf"});
     root.querySelectorAll = () => [];
     for (const id of ["sim-status", "sim-results", "farmer-farms", "farmer-listings",
-        "farmer-crops", "refresh-crops", "refresh-farms", "refresh-listings"]) element(id);
+        "farmer-crops", "refresh-crops", "refresh-farms", "refresh-listings",
+        "load-listing-calendar"]) element(id);
     elements["farmer-crops"].hidden = true;
     const listing = form("farmer-listing-form", {
         listing_id: "", crop_id: "", farm_id: "1", crop_type_id: "2",
@@ -73,6 +74,12 @@ function setup() {
         price_per_kg: "10", is_active: "true",
     });
     form("listing-expense-form", {listing_id: "", tag: "", amount: ""});
+    form("listing-calendar-form", {
+        listing_id: "", land_preparation_start: "", land_preparation_end: "",
+        planting_start: "", planting_end: "", harvesting_start: "", harvesting_end: "",
+        packing_duration_days: "", expected_quantity_kg: "", actual_harvested_kg: "",
+        preorder_lead_time_days: "", delivery_date: "",
+    });
     form("farm-form", {farm_id: ""});
 
     const document = {
@@ -111,6 +118,16 @@ function setup() {
         } else if (url.endsWith("listings/9/expenses/") && options.method === "POST") {
             payload = {expense_id: 1, ...JSON.parse(options.body)};
             status = 201;
+        } else if (url.endsWith("listings/9/calendar/")) {
+            payload = {
+                calendar_id: 5, land_preparation_start: null, land_preparation_end: null,
+                planting_start: "2027-01-01", planting_end: null,
+                harvesting_start: null, harvesting_end: null, packing_duration_days: null,
+                expected_quantity_kg: null, actual_harvested_kg: null,
+                preorder_lead_time_days: null, delivery_date: null,
+                ...(options.body ? JSON.parse(options.body) : {}),
+            };
+            if (state.malformedCalendar) delete payload.planting_end;
         }
         return {ok: status < 400, status, text: async () => JSON.stringify(payload)};
     }
@@ -165,6 +182,40 @@ test("expenses are submitted for the selected listing", async () => {
     assert.equal(request[2].tag, "Fuel");
     assert.equal(request[2].amount, "12.50");
     assert.equal(expense.formStatus.textContent, "Expense added.");
+});
+
+test("schedules must be loaded for the selected listing before saving", async () => {
+    const {elements, listing, state} = setup();
+    await listing.trigger("submit");
+    const calendar = elements["listing-calendar-form"];
+    await calendar.trigger("submit");
+    assert.match(calendar.formStatus.textContent, /Load this listing/);
+    await elements["load-listing-calendar"].trigger("click");
+    assert.equal(calendar.elements.planting_start.value, "2027-01-01");
+    calendar.elements.planting_start.value = "";
+    calendar.elements.packing_duration_days.value = "3";
+    await calendar.trigger("submit");
+    const request = state.requests.find(([url, method]) => url.endsWith("listings/9/calendar/") && method === "PATCH");
+    assert.equal(request[2].planting_start, null);
+    assert.equal(request[2].packing_duration_days, "3");
+    assert.equal(calendar.formStatus.textContent, "Schedule saved.");
+    calendar.elements.listing_id.value = "10";
+    await calendar.elements.listing_id.trigger("input");
+    await calendar.trigger("submit");
+    assert.match(calendar.formStatus.textContent, /Load this listing/);
+    assert.equal(state.requests.filter(([, method]) => method === "PATCH").length, 1);
+});
+
+test("incomplete schedule responses cannot be saved", async () => {
+    const {elements, listing, state} = setup();
+    await listing.trigger("submit");
+    const calendar = elements["listing-calendar-form"];
+    state.malformedCalendar = true;
+    await elements["load-listing-calendar"].trigger("click");
+    assert.match(calendar.formStatus.textContent, /incomplete schedule/);
+    assert.equal(calendar.elements.planting_start.disabled, true);
+    await calendar.trigger("submit");
+    assert.match(calendar.formStatus.textContent, /Load this listing/);
 });
 
 test("My crops shows loading failures and can retry", async () => {

@@ -14,6 +14,14 @@
         username: root.dataset.farmerUsername,
     } : null;
     let farmerPage = 1;
+    let calendarGeneration = 0;
+    let loadedCalendarListing = null;
+    let loadedCalendarValues = null;
+    const calendarFields = [
+        "land_preparation_start", "land_preparation_end", "planting_start", "planting_end",
+        "harvesting_start", "harvesting_end", "packing_duration_days", "expected_quantity_kg",
+        "actual_harvested_kg", "preorder_lead_time_days", "delivery_date",
+    ];
 
     function setStatus(message, isError = false) {
         status.textContent = message;
@@ -93,6 +101,7 @@
                             updateListingStockInput();
                             fill("farmer-listing-form", "listing_id", item.listing_id);
                             fill("listing-expense-form", "listing_id", item.listing_id);
+                            selectCalendarListing(item.listing_id);
                         });
                     } else if (section === "businesses" && item.listing_id) {
                         addSelectButton(card, "Use listing", () => fill("order-form", "listing_id", item.listing_id));
@@ -230,6 +239,23 @@
         });
     }
 
+    function invalidateCalendar(form) {
+        calendarGeneration += 1;
+        loadedCalendarListing = null;
+        loadedCalendarValues = null;
+        for (const field of calendarFields) form.elements[field].disabled = true;
+        const formStatus = form.querySelector("[data-form-status]");
+        formStatus.textContent = "Load this listing's schedule before saving.";
+        formStatus.classList.remove("error");
+    }
+
+    function selectCalendarListing(listingId) {
+        const form = document.getElementById("listing-calendar-form");
+        if (!form) return;
+        fill("listing-calendar-form", "listing_id", listingId);
+        invalidateCalendar(form);
+    }
+
     function address(values, prefix) {
         const fields = ["street_address", "barangay", "municipality_city", "province", "postal_code", "country", "gps_coordinates"];
         return Object.fromEntries(fields.map((field) => [field, values[`${prefix}_${field}`]]));
@@ -297,6 +323,9 @@
 
     if (selectedFarmer) {
         document.getElementById("farmer-listing-form").elements.crop_id.addEventListener("input", updateListingStockInput);
+        const calendarForm = document.getElementById("listing-calendar-form");
+        calendarForm.elements.listing_id.addEventListener("input", () => invalidateCalendar(calendarForm));
+        invalidateCalendar(calendarForm);
         handleButton("refresh-crops", async () => {
             document.getElementById("farmer-crops").hidden = false;
             const loaded = await loadFarmerCollection("crops");
@@ -632,6 +661,61 @@
         setStatus("Listing expenses loaded. See results below.");
     });
 
+    handleButton("load-listing-calendar", async () => {
+        const form = document.getElementById("listing-calendar-form");
+        const listingId = form.elements.listing_id.value;
+        if (!/^[1-9]\d*$/.test(listingId)) {
+            form.querySelector("[data-form-status]").textContent = "Enter a valid listing ID.";
+            throw new Error("Enter a valid listing ID.");
+        }
+        invalidateCalendar(form);
+        const generation = calendarGeneration;
+        const formStatus = form.querySelector("[data-form-status]");
+        formStatus.textContent = "Loading schedule...";
+        try {
+            const data = await api(`listings/${listingId}/calendar/`, "GET", null, true,
+                () => generation === calendarGeneration && form.elements.listing_id.value === listingId, false);
+            if (!data || typeof data !== "object" || calendarFields.some((field) => !Object.hasOwn(data, field))) {
+                throw new Error("The server returned an incomplete schedule.");
+            }
+            loadedCalendarValues = {};
+            for (const field of calendarFields) {
+                const value = data[field] === null ? "" : String(data[field]);
+                form.elements[field].value = value;
+                form.elements[field].disabled = false;
+                loadedCalendarValues[field] = value;
+            }
+            loadedCalendarListing = listingId;
+            formStatus.textContent = "Schedule loaded. Edit the fields and save.";
+            formStatus.classList.remove("error");
+            setStatus("Schedule loaded.");
+        } catch (error) {
+            if (generation !== calendarGeneration) return;
+            formStatus.textContent = `Could not load schedule. ${error.message}`;
+            formStatus.classList.add("error");
+            throw error;
+        }
+    });
+
+    handle("listing-calendar-form", async (form, values) => {
+        const {listing_id, ...fields} = values;
+        if (listing_id !== loadedCalendarListing) throw new Error("Load this listing's schedule before saving.");
+        const generation = calendarGeneration;
+        const payload = Object.fromEntries(calendarFields
+            .filter((field) => fields[field] !== loadedCalendarValues[field])
+            .map((field) => [field, fields[field] || null]));
+        if (!Object.keys(payload).length) throw new Error("Change at least one schedule field before saving.");
+        const result = await api(`listings/${listing_id}/calendar/`, "PATCH", payload);
+        show(result);
+        if (generation === calendarGeneration && form.elements.listing_id.value === listing_id) {
+            loadedCalendarValues = Object.fromEntries(calendarFields.map((field) =>
+                [field, result[field] === null ? "" : String(result[field])]));
+            form.querySelector("[data-form-status]").textContent = "Schedule saved.";
+            form.querySelector("[data-form-status]").classList.remove("error");
+        }
+        setStatus("Schedule saved.");
+    });
+
     handle("farmer-listing-form", async (form, values) => {
         const payload = nonempty(values);
         const id = payload.listing_id;
@@ -649,6 +733,7 @@
         formStatus.textContent = message;
         formStatus.classList.remove("error");
         document.getElementById("listing-expense-form").elements.listing_id.value = result.listing_id;
+        selectCalendarListing(result.listing_id);
         const refreshes = [loadFarmerCollection("listings")];
         if (!document.getElementById("farmer-crops").hidden) {
             refreshes.push(loadFarmerCollection("crops"));

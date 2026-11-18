@@ -163,6 +163,67 @@ class ListingOperatingExpenseSerializer(serializers.ModelSerializer):
         read_only_fields = ("expense_id",)
 
 
+class ListingCalendarSerializer(serializers.ModelSerializer):
+    packing_duration_days = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, max_value=32767
+    )
+    preorder_lead_time_days = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, max_value=32767
+    )
+    expected_quantity_kg = serializers.DecimalField(
+        required=False,
+        allow_null=True,
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0"),
+    )
+    actual_harvested_kg = serializers.DecimalField(
+        required=False,
+        allow_null=True,
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0"),
+    )
+
+    class Meta:
+        model = CropCalendar
+        fields = (
+            "calendar_id",
+            "land_preparation_start",
+            "land_preparation_end",
+            "planting_start",
+            "planting_end",
+            "harvesting_start",
+            "harvesting_end",
+            "packing_duration_days",
+            "expected_quantity_kg",
+            "actual_harvested_kg",
+            "preorder_lead_time_days",
+            "delivery_date",
+        )
+        read_only_fields = ("calendar_id",)
+
+    def validate(self, attrs):
+        for stage in ("land_preparation", "planting", "harvesting"):
+            start_field, end_field = f"{stage}_start", f"{stage}_end"
+            start = attrs.get(start_field, getattr(self.instance, start_field, None))
+            end = attrs.get(end_field, getattr(self.instance, end_field, None))
+            if start and end and start > end:
+                raise serializers.ValidationError(
+                    {end_field: "The end date must not be before the start date."}
+                )
+        return attrs
+
+
+def copy_calendar(calendar):
+    values = {
+        field.attname: getattr(calendar, field.attname)
+        for field in CropCalendar._meta.concrete_fields
+        if not field.primary_key
+    }
+    return CropCalendar.objects.create(**values)
+
+
 def farmer_listing_data(listing):
     crop = listing.crop
     return {
@@ -290,6 +351,58 @@ class ListingExpensesView(FarmerView):
         return Response(serializer.data, status=201)
 
 
+class ListingCalendarView(FarmerView):
+    def get_calendar(self, listing):
+        calendar = listing.calendar
+        if calendar is not None and calendar.crop_id != listing.crop_id:
+            raise serializers.ValidationError(
+                {"calendar": "The listing calendar does not belong to its crop."}
+            )
+        return calendar
+
+    def get(self, request, listing_id):
+        listing = get_object_or_404(
+            owned_listings(request.user).select_related("calendar"), pk=listing_id
+        )
+        calendar = self.get_calendar(listing)
+        return Response(ListingCalendarSerializer(calendar or CropCalendar()).data)
+
+    @transaction.atomic
+    def patch(self, request, listing_id):
+        listing = get_object_or_404(
+            owned_listings(request.user)
+            .select_for_update(of=("self",))
+            .select_related("crop__farm"),
+            pk=listing_id,
+        )
+        calendar = None
+        if listing.calendar_id:
+            calendar = get_object_or_404(
+                CropCalendar.objects.select_for_update(), pk=listing.calendar_id
+            )
+            listing.calendar = calendar
+            self.get_calendar(listing)
+        candidate = calendar or CropCalendar(
+            crop=listing.crop, pickup_address=listing.crop.farm.address
+        )
+        serializer = ListingCalendarSerializer(
+            candidate, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        if not serializer.validated_data:
+            raise serializers.ValidationError("Provide at least one schedule field.")
+        if calendar and (
+            calendar.marketplace_listings.exclude(pk=listing.pk).exists()
+            or calendar.order_items.exists()
+        ):
+            serializer.instance = copy_calendar(calendar)
+        saved = serializer.save(calendar_status=None)
+        if listing.calendar_id != saved.pk:
+            listing.calendar = saved
+            listing.save(update_fields=["calendar"])
+        return Response(ListingCalendarSerializer(saved).data)
+
+
 class FarmerListingsView(FarmerView):
     def get(self, request):
         listings = (
@@ -320,7 +433,9 @@ class FarmerListingsView(FarmerView):
                 crop.batch_number = data["batch_number"]
                 crop.save(update_fields=["batch_number"])
             calendar = crop.calendars.order_by("-calendar_id").first()
-            if calendar is None:
+            if calendar is not None:
+                calendar = copy_calendar(calendar)
+            else:
                 calendar = CropCalendar.objects.create(
                     crop=crop, pickup_address=crop.farm.address
                 )
