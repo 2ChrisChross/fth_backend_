@@ -3,13 +3,15 @@ from datetime import timedelta
 
 from django.core.paginator import Paginator
 from django.db import connection
-from django.db.models import OuterRef, Prefetch, Q, Subquery
+from django.db.models import Exists, OuterRef, Prefetch, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
 
 from businesses.models import BulkBuyer
 from farmers.models import Farm, FarmerCodeRequest
 from logistics.models import Vehicle
+from shared.enums import enum_rows
 from shared.models import (
     Address,
     AuditLog,
@@ -17,8 +19,9 @@ from shared.models import (
     PhoneNumber,
     User,
 )
-from shared.enums import enum_rows
 from shared.registration import resolve_enum_order_id
+
+from .filters import apply_date_filter, apply_farm_filters
 
 DASHBOARD_PAGE_SIZE = 50
 
@@ -185,7 +188,9 @@ def build_dashboard_rows(
     status_filter="all",
     page_number=None,
     page_size=DASHBOARD_PAGE_SIZE,
+    filters=None,
 ):
+    filters = filters or {}
     sort_field = sort_field or "last_name"
     sort_dir = sort_dir if sort_dir in {"asc", "desc"} else "asc"
     status_filter = status_filter or "all"
@@ -246,7 +251,7 @@ def build_dashboard_rows(
             )
 
         if status_filter == "pending":
-            users = users.filter(is_verified__in=[0, None])
+            users = users.filter(Q(is_verified=0) | Q(is_verified__isnull=True))
         elif status_filter == "verified":
             users = users.filter(is_verified__in=[1, True, "1"])
         elif status_filter == "rejected":
@@ -262,6 +267,18 @@ def build_dashboard_rows(
                 | Q(farms__address__barangay__icontains=query)
             ).distinct()
 
+        if any(
+            filters.get(name)
+            for name in ("province", "municipality", "barangay", "crop", "farm_size")
+        ):
+            matching_farms = apply_farm_filters(
+                Farm.objects.filter(
+                    user_id=OuterRef("user_id"), deleted_at__isnull=True
+                ),
+                filters,
+            )
+            users = users.filter(Exists(matching_farms))
+        users = apply_date_filter(users, "dashboard_created_at", filters)
         users, page_obj = _paginate_queryset(users, page_number, page_size)
         rows = []
         for user in users:
@@ -288,10 +305,10 @@ def build_dashboard_rows(
                         if part
                     )
                     or "-",
-                    "status_value": 1 if user.is_verified in (1, True, "1") else 0,
-                    "status_label": "Registered"
-                    if user.is_verified in (1, True, "1")
-                    else "Pending",
+                    "status_value": int(user.is_verified or 0),
+                    "status_label": {1: "Registered", 2: "Rejected"}.get(
+                        user.is_verified, "Pending"
+                    ),
                     "status_options": [
                         (0, "Pending"),
                         (1, "Registered"),
@@ -350,12 +367,15 @@ def build_dashboard_rows(
             )
 
         status_filters = {
-            "pending": {"current_health_status__in": [0, None]},
             "healthy": {"current_health_status": 1},
             "maintenance": {"current_health_status": 2},
             "disabled": {"current_health_status": 3},
         }
-        if status_filter in status_filters:
+        if status_filter == "pending":
+            vehicles = vehicles.filter(
+                Q(current_health_status=0) | Q(current_health_status__isnull=True)
+            )
+        elif status_filter in status_filters:
             vehicles = vehicles.filter(**status_filters[status_filter])
         if query:
             vehicles = vehicles.filter(
@@ -365,6 +385,19 @@ def build_dashboard_rows(
                 | Q(user__last_name__icontains=query)
             )
 
+        if filters.get("body_type"):
+            vehicles = vehicles.filter(body_type=int(filters["body_type"]))
+        if filters.get("refrigerated") in ("0", "1"):
+            vehicles = vehicles.filter(is_refrigerated=int(filters["refrigerated"]))
+        if filters.get("min_capacity") is not None:
+            vehicles = vehicles.filter(
+                max_weight_capacity_kg__gte=filters["min_capacity"]
+            )
+        if filters.get("max_capacity") is not None:
+            vehicles = vehicles.filter(
+                max_weight_capacity_kg__lte=filters["max_capacity"]
+            )
+        vehicles = apply_date_filter(vehicles, "dashboard_created_at", filters)
         vehicles, page_obj = _paginate_queryset(vehicles, page_number, page_size)
         rows = []
         for vehicle in vehicles:
@@ -414,8 +447,10 @@ def build_dashboard_rows(
             .order_by("created_at")
             .values("created_at")[:1]
         )
-        bulk_buyers = BulkBuyer.objects.select_related("user").annotate(
-            dashboard_created_at=Subquery(creation_date_query)
+        bulk_buyers = BulkBuyer.objects.select_related("user", "address").annotate(
+            dashboard_created_at=Coalesce(
+                "date_time_created", Subquery(creation_date_query)
+            )
         )
         if sort_field == "status":
             bulk_buyers = bulk_buyers.order_by(
@@ -431,11 +466,14 @@ def build_dashboard_rows(
             )
 
         status_filters = {
-            "pending": {"is_verified__in": [0, None]},
             "approved": {"is_verified__in": [1, True, "1"]},
             "rejected": {"is_verified": 2},
         }
-        if status_filter in status_filters:
+        if status_filter == "pending":
+            bulk_buyers = bulk_buyers.filter(
+                Q(is_verified=0) | Q(is_verified__isnull=True)
+            )
+        elif status_filter in status_filters:
             bulk_buyers = bulk_buyers.filter(**status_filters[status_filter])
         if query:
             bulk_buyers = bulk_buyers.filter(
@@ -445,6 +483,16 @@ def build_dashboard_rows(
                 | Q(user__last_name__icontains=query)
             )
 
+        for name, field in (
+            ("province", "address__province"),
+            ("municipality", "address__municipality_city"),
+            ("barangay", "address__barangay"),
+        ):
+            if filters.get(name):
+                bulk_buyers = bulk_buyers.filter(
+                    **{f"{field}__icontains": filters[name]}
+                )
+        bulk_buyers = apply_date_filter(bulk_buyers, "dashboard_created_at", filters)
         bulk_buyers, page_obj = _paginate_queryset(
             bulk_buyers, page_number, page_size
         )
@@ -467,12 +515,10 @@ def build_dashboard_rows(
                     if owner
                     else "-",
                     "registration_number": bulk_buyer.registration_number or "-",
-                    "status_value": 1
-                    if bulk_buyer.is_verified in (1, True, "1")
-                    else 0,
-                    "status_label": "Approved"
-                    if bulk_buyer.is_verified in (1, True, "1")
-                    else "Pending",
+                    "status_value": int(bulk_buyer.is_verified or 0),
+                    "status_label": {1: "Approved", 2: "Rejected"}.get(
+                        bulk_buyer.is_verified, "Pending"
+                    ),
                     "status_options": [
                         (0, "Pending"),
                         (1, "Approved"),
@@ -501,6 +547,11 @@ def build_dashboard_rows(
             | Q(user__last_name__icontains=query)
         )
 
+    if filters.get("action_type"):
+        audit_logs = audit_logs.filter(action_type__icontains=filters["action_type"])
+    if filters.get("target_type"):
+        audit_logs = audit_logs.filter(target_table__icontains=filters["target_type"])
+    audit_logs = apply_date_filter(audit_logs, "created_at", filters)
     audit_logs, page_obj = _paginate_queryset(audit_logs, page_number, page_size)
     rows = [
         {

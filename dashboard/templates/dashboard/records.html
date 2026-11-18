@@ -1,4 +1,5 @@
 {% extends "dashboard/base.html" %}
+{% load static %}
 {% block title %}{{ section_title }} | FTH Dashboard{% endblock %}
 {% block extra_head %}
     <style>
@@ -133,6 +134,27 @@
             margin-top: 16px;
         }
         .table-wrap { overflow-x: auto; }
+        .column-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+        .column-toolbar [hidden], .column-menu[hidden] { display: none; }
+        .column-menu {
+            position: fixed; z-index: 20; max-height: 80vh; max-width: calc(100vw - 16px); overflow-y: auto;
+            padding: 14px; background: white; border: 1px solid #c7d0dc;
+            border-radius: 8px; box-shadow: 0 4px 16px #0003;
+        }
+        .column-menu label { display: flex; align-items: center; gap: 8px; padding: 4px; }
+        .column-menu input { padding: 0; }
+        .column-menu p { margin: 0 0 8px; }
+        .column-menu .column-warning { color: #a02424; }
+        .columns-ready { table-layout: fixed; min-width: 100%; }
+        .columns-ready th { position: relative; }
+        .columns-ready th, .columns-ready td { overflow-wrap: anywhere; overflow: hidden; }
+        .columns-ready [hidden] { display: none; }
+        .column-resize {
+            position: absolute; right: 0; top: 0; bottom: 0; width: 10px;
+            cursor: col-resize; touch-action: none; box-sizing: border-box;
+            border-right: 2px solid #bac9dc;
+        }
+        .column-resize:hover, .column-resize:focus { background: #1d4fbf55; }
         @media (max-width: 760px) {
             .dashboard-shell { display: block; }
             .sidebar { width: auto; }
@@ -183,16 +205,20 @@
                             <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
                         </select>
 
+                        {% for field in filter_form %}
+                            <label>{{ field.label }} {{ field }} {{ field.errors }}</label>
+                        {% endfor %}
+                        {{ filter_form.non_field_errors }}
                         <button class="btn btn-secondary" type="submit">Search</button>
-                        {% if query or sort_field != 'last_name' and sort_field != 'business_name' and sort_field != 'newest' and sort_field != 'verification' and sort_field != 'status' and sort_field != 'capacity' and sort_field != 'action' and sort_field != 'user' and sort_field != 'owner' and sort_field != 'plate_number' or sort_dir != 'asc' or status_filter != 'all' %}
-                            <a class="btn btn-secondary" href="{{ dashboard_url }}">Clear</a>
-                        {% endif %}
+                        <a class="btn btn-secondary" href="{{ dashboard_url }}">Clear</a>
                     </form>
                 </div>
 
+                {% if filter_error %}<div class="messages error" role="alert">Correct the filter errors above.</div>{% endif %}
                 <div class="status-chip-row">
                     {% if section == 'farmers' %}
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -201,6 +227,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -209,6 +236,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -217,6 +245,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'verified' %}active{% endif %}">Registered</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -226,6 +255,7 @@
                         </form>
                     {% elif section == 'logistics' %}
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -234,6 +264,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -242,6 +273,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -250,6 +282,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'healthy' %}active{% endif %}">Healthy</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -258,6 +291,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'maintenance' %}active{% endif %}">Maintenance</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -267,6 +301,7 @@
                         </form>
                     {% elif section == 'businesses' %}
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -275,6 +310,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'all' %}active{% endif %}">All</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -283,6 +319,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'pending' %}active{% endif %}">Pending</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -291,6 +328,7 @@
                             <button type="submit" class="status-chip {% if status_filter == 'approved' %}active{% endif %}">Approved</button>
                         </form>
                         <form class="status-chip-form" method="get">
+                            {% include 'dashboard/_filter_hidden.html' %}
                             <input type="hidden" name="section" value="{{ section }}">
                             <input type="hidden" name="q" value="{{ query }}">
                             <input type="hidden" name="sort_field" value="{{ sort_field }}">
@@ -301,28 +339,46 @@
                     {% endif %}
                 </div>
 
-                {% if rows %}
+                {% if rows or section == 'farmers' or section == 'logistics' or section == 'businesses' %}
+                    {% if section != 'audit_logs' %}
+                        <div class="column-toolbar">
+                            <button type="button" class="btn btn-secondary" data-column-menu-button aria-expanded="false" aria-controls="column-menu" hidden>Columns</button>
+                        </div>
+                        <div id="column-menu" class="column-menu" role="dialog" aria-label="Choose columns" hidden>
+                            <p><strong>Show columns</strong></p>
+                            <div data-column-options></div>
+                            <p class="column-warning" data-column-warning role="status" hidden></p>
+                            <button type="button" data-column-reset>Reset columns</button>
+                        </div>
+                    {% endif %}
                     <div class="table-wrap">
-                    <table>
+                    <table {% if section != 'audit_logs' %}data-column-table="{{ section }}"{% endif %}>
                         <thead>
                             <tr>
                                 {% if section == 'farmers' %}
-                                    <th>Name</th>
-                                    <th>Created</th>
-                                    <th>Account</th>
-                                    <th>Actions</th>
+                                    <th data-column="name">Name</th>
+                                    <th data-column="created">Created</th>
+                                    <th data-column="account">Account</th>
+                                    <th data-column="actions">Actions</th>
+                                    <th data-column="phone" hidden>Phone</th>
+                                    <th data-column="farm_size" hidden>First farm size (ha)</th>
+                                    <th data-column="location" hidden>First farm location</th>
                                 {% elif section == 'logistics' %}
-                                    <th>Driver</th>
-                                    <th>Plate Number</th>
-                                    <th>Vehicle</th>
-                                    <th>Created</th>
-                                    <th>Stage</th>
+                                    <th data-column="driver">Driver</th>
+                                    <th data-column="plate">Plate Number</th>
+                                    <th data-column="vehicle">Vehicle</th>
+                                    <th data-column="created">Created</th>
+                                    <th data-column="stage">Stage</th>
+                                    <th data-column="weight" hidden>Weight capacity (kg)</th>
+                                    <th data-column="volume" hidden>Volume capacity (m3)</th>
+                                    <th data-column="refrigerated" hidden>Refrigerated</th>
                                 {% elif section == 'businesses' %}
-                                    <th>Bulk Buyer</th>
-                                    <th>Owner</th>
-                                    <th>Registration</th>
-                                    <th>Created</th>
-                                    <th>Stage</th>
+                                    <th data-column="buyer">Bulk Buyer</th>
+                                    <th data-column="owner">Owner</th>
+                                    <th data-column="registration">Registration</th>
+                                    <th data-column="created">Created</th>
+                                    <th data-column="stage">Stage</th>
+                                    <th data-column="address" hidden>Business address</th>
                                 {% else %}
                                     <th>User</th>
                                     <th>Action</th>
@@ -336,32 +392,35 @@
                             {% for row in rows %}
                                 <tr>
                                     {% if section == 'farmers' %}
-                                        <td><a href="{% url 'farmers:detail' row.entity.user_id %}">{{ row.name }}</a></td>
-                                        <td>
+                                        <td data-column="name"><a href="{% url 'farmers:detail' row.entity.user_id %}">{{ row.name }}</a></td>
+                                        <td data-column="created">
                                             {% if row.created_at %}
                                                 {{ row.created_at|date:"M d, Y" }}
                                             {% else %}
                                                 -
                                             {% endif %}
                                         </td>
-                                        <td>
+                                        <td data-column="account">
                                             <span class="badge">{{ row.status_label }}</span>
                                         </td>
-                                        <td>
+                                        <td data-column="actions">
                                             <button type="button" class="btn btn-danger" data-delete-url="{% url 'farmers:delete' row.entity.user_id %}" data-delete-name="{{ row.name }}">Delete</button>
                                         </td>
+                                        <td data-column="phone" hidden>{{ row.phone|default:"-" }}</td>
+                                        <td data-column="farm_size" hidden>{{ row.farm_size|default_if_none:"-" }}</td>
+                                        <td data-column="location" hidden>{{ row.location|default:"-" }}</td>
                                     {% elif section == 'logistics' %}
-                                        <td>{{ row.name }}</td>
-                                        <td>{{ row.plate_number }}</td>
-                                        <td>{{ row.model }}</td>
-                                        <td>
+                                        <td data-column="driver">{{ row.name }}</td>
+                                        <td data-column="plate">{{ row.plate_number }}</td>
+                                        <td data-column="vehicle">{{ row.model }}</td>
+                                        <td data-column="created">
                                             {% if row.created_at %}
                                                 {{ row.created_at|date:"M d, Y" }}
                                             {% else %}
                                                 -
                                             {% endif %}
                                         </td>
-                                        <td>
+                                        <td data-column="stage">
                                             <form class="status-form" method="post">
                                                 {% csrf_token %}
                                                 <input type="hidden" name="section" value="{{ section }}">
@@ -374,18 +433,21 @@
                                                 <button class="btn btn-secondary" type="submit">Save</button>
                                             </form>
                                         </td>
+                                        <td data-column="weight" hidden>{{ row.entity.max_weight_capacity_kg|default_if_none:"-" }}</td>
+                                        <td data-column="volume" hidden>{{ row.entity.max_volume_capacity_m3|default_if_none:"-" }}</td>
+                                        <td data-column="refrigerated" hidden>{% if row.entity.is_refrigerated == 1 %}Yes{% elif row.entity.is_refrigerated == 0 %}No{% else %}-{% endif %}</td>
                                     {% elif section == 'businesses' %}
-                                        <td>{{ row.name }}</td>
-                                        <td>{{ row.owner }}</td>
-                                        <td>{{ row.registration_number }}</td>
-                                        <td>
+                                        <td data-column="buyer">{{ row.name }}</td>
+                                        <td data-column="owner">{{ row.owner }}</td>
+                                        <td data-column="registration">{{ row.registration_number }}</td>
+                                        <td data-column="created">
                                             {% if row.created_at %}
                                                 {{ row.created_at|date:"M d, Y" }}
                                             {% else %}
                                                 -
                                             {% endif %}
                                         </td>
-                                        <td>
+                                        <td data-column="stage">
                                             <form class="status-form" method="post">
                                                 {% csrf_token %}
                                                 <input type="hidden" name="section" value="{{ section }}">
@@ -398,6 +460,7 @@
                                                 <button class="btn btn-secondary" type="submit">Save</button>
                                             </form>
                                         </td>
+                                        <td data-column="address" hidden>{% if row.entity.address %}{% with address=row.entity.address %}{% if address.street_address %}{{ address.street_address }}, {% endif %}{% if address.barangay %}{{ address.barangay }}, {% endif %}{% if address.municipality_city %}{{ address.municipality_city }}, {% endif %}{{ address.province|default:"" }}{% endwith %}{% else %}-{% endif %}</td>
                                     {% else %}
                                         <td>{{ row.name }}</td>
                                         <td>{{ row.action }}</td>
@@ -410,20 +473,22 @@
                         </tbody>
                     </table>
                     </div>
-                {% else %}
+                {% endif %}
+                {% if not rows %}
                     <div class="empty">No {{ section }} match your search.</div>
                 {% endif %}
                 {% if page_obj and page_obj.paginator.num_pages > 1 %}
                     <nav class="pagination" aria-label="Pagination">
                         <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
                         {% if page_obj.has_previous %}
-                            <a href="?section={{ section|urlencode }}&q={{ query|urlencode }}&sort_field={{ sort_field|urlencode }}&sort_dir={{ sort_dir|urlencode }}&status_filter={{ status_filter|urlencode }}&page={{ page_obj.previous_page_number }}">Previous</a>
+                            <a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
                         {% endif %}
                         {% if page_obj.has_next %}
-                            <a href="?section={{ section|urlencode }}&q={{ query|urlencode }}&sort_field={{ sort_field|urlencode }}&sort_dir={{ sort_dir|urlencode }}&status_filter={{ status_filter|urlencode }}&page={{ page_obj.next_page_number }}">Next</a>
+                            <a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>
                         {% endif %}
                     </nav>
                 {% endif %}
             {% endif %}
 {% if section == 'farmers' %}{% include 'dashboard/_delete_dialog.html' %}{% endif %}
+{% if section == 'farmers' or section == 'logistics' or section == 'businesses' %}<script src="{% static 'dashboard/columns.js' %}" defer></script>{% endif %}
 {% endblock %}

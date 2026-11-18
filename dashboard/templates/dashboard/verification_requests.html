@@ -43,6 +43,12 @@
                 {% endfor %}
             </select>
         </label>
+        {% for field in filter_form %}
+            <label>{{ field.label }} {{ field }} {{ field.errors }}</label>
+        {% endfor %}
+        {{ filter_form.non_field_errors }}
+        <button type="submit">Search</button>
+        <a href="{% url 'dashboard_verification_requests' %}">Clear</a>
         <noscript><button type="submit">Apply filters</button></noscript>
     </form>
     {% if not error %}
@@ -67,7 +73,7 @@
                         <td>{{ item.code_expires_at|date:"Y-m-d H:i"|default:"-" }}</td>
                         <td class="actions">
                             {% if item.status == 'pending_review' and can_review or item.status == 'approved' and can_issue or item.status == 'code_issued' and can_issue %}
-                                <form method="post" action="{% if item.queue_kind == 'farmers' %}{% url 'dashboard_code_requests' %}{% else %}{% url 'dashboard_account_code_requests' item.queue_kind %}{% endif %}?queue=unified&amp;type={{ selected_type|urlencode }}&amp;status={{ selected_status|urlencode }}{% if farmer_id %}&amp;farmer_id={{ farmer_id|urlencode }}{% endif %}&amp;page={{ page_obj.number }}">
+                                <form method="post" action="{% if item.queue_kind == 'farmers' %}{% url 'dashboard_code_requests' %}{% else %}{% url 'dashboard_account_code_requests' item.queue_kind %}{% endif %}?{{ action_query }}">
                                     {% csrf_token %}
                                     <input type="hidden" name="request_id" value="{{ item.request_id }}">
                                     {% if item.status == 'pending_review' %}
@@ -90,8 +96,8 @@
         {% if page_obj.paginator.num_pages > 1 %}
             <nav class="pagination" aria-label="Pagination">
                 <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-                {% if page_obj.has_previous %}<a href="?type={{ selected_type|urlencode }}&amp;status={{ selected_status|urlencode }}{% if farmer_id %}&amp;farmer_id={{ farmer_id|urlencode }}{% endif %}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
-                {% if page_obj.has_next %}<a href="?type={{ selected_type|urlencode }}&amp;status={{ selected_status|urlencode }}{% if farmer_id %}&amp;farmer_id={{ farmer_id|urlencode }}{% endif %}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+                {% if page_obj.has_previous %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+                {% if page_obj.has_next %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
             </nav>
         {% endif %}
     {% endif %}

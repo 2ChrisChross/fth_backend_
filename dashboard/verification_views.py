@@ -9,6 +9,7 @@ from farmers.models import FarmerCodeRequest
 from shared.models import AccountCodeRequest, PhoneNumber
 
 from .account_views import _table_ready
+from .filters import DashboardFilterForm, apply_date_filter
 from .permissions import (
     dashboard_navigation,
     dashboard_permission_required,
@@ -25,7 +26,9 @@ def return_to_unified_queue(request):
     params = request.GET.copy()
     params.pop("queue", None)
     for key in list(params):
-        if key not in {"type", "status", "farmer_id", "page"}:
+        if key not in {
+            "type", "status", "farmer_id", "page", "purpose", "date_from", "date_to"
+        }:
             params.pop(key)
     url = reverse("dashboard_verification_requests")
     return redirect(f"{url}?{params.urlencode()}" if params else url)
@@ -40,6 +43,7 @@ def verification_requests(request):
     )
     selected_status = request.GET.get("status", "all")
     farmer_id = request.GET.get("farmer_id", "").strip()
+    filter_form = DashboardFilterForm("verification", request.GET)
     if selected_type != "farmers":
         farmer_id = ""
     can_review = has_dashboard_permission(
@@ -60,6 +64,7 @@ def verification_requests(request):
         "can_issue": can_issue,
         "can_view_farmer_detail": can_view_applications,
         "can_view_account_detail": can_review and can_view_applications,
+        "filter_form": filter_form,
     }
     if not database_ready_for_dashboard() or not _table_ready():
         context["error"] = (
@@ -84,9 +89,21 @@ def verification_requests(request):
         return render(
             request, "dashboard/verification_requests.html", context, status=400
         )
+    if not filter_form.is_valid():
+        context["error"] = "Correct the filter errors below."
+        return render(
+            request, "dashboard/verification_requests.html", context, status=400
+        )
 
     farmers = FarmerCodeRequest.objects.all()
     accounts = AccountCodeRequest.objects.all()
+    filters = filter_form.cleaned_data
+    farmers = apply_date_filter(farmers, "requested_at", filters)
+    accounts = apply_date_filter(accounts, "requested_at", filters)
+    if filters["purpose"]:
+        farmers = farmers.filter(purpose=filters["purpose"])
+        if filters["purpose"] == FarmerCodeRequest.Purpose.RECOVERY:
+            accounts = accounts.none()
     if selected_status != "all":
         farmers = farmers.filter(status=selected_status)
         accounts = accounts.filter(status=selected_status)
@@ -159,4 +176,10 @@ def verification_requests(request):
         page_obj=page_obj,
         issued_codes=[code for code in issued_codes if code] if can_issue else [],
     )
+    params = request.GET.copy()
+    params.pop("page", None)
+    context["filter_query"] = params.urlencode()
+    params["page"] = str(page_obj.number)
+    params["queue"] = "unified"
+    context["action_query"] = params.urlencode()
     return render(request, "dashboard/verification_requests.html", context)

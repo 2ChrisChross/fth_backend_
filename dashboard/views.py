@@ -24,6 +24,7 @@ from logistics.models import Vehicle
 from shared.models import AuditLog, PhoneNumber
 
 from .farmer_views import dashboard_user_delete
+from .filters import DashboardFilterForm
 from .forms import DashboardAuthenticationForm
 from .permissions import (
     dashboard_navigation,
@@ -374,10 +375,8 @@ def dashboard_users(request, section_override=None):
                 messages.error(request, str(exc))
 
         destination = _dashboard_url(section)
-        separator = "&" if "?" in destination else "?"
-        return redirect(
-            f"{destination}{separator}q={query}&sort_field={sort_field}&sort_dir={sort_dir}&status_filter={status_filter}"
-        )
+        params = request.GET.urlencode()
+        return redirect(f"{destination}?{params}" if params else destination)
 
     section_title = (
         "Bulk Buyers" if section == "businesses" else section.replace("_", " ").title()
@@ -404,16 +403,30 @@ def dashboard_users(request, section_override=None):
             "Run your migrations or connect the project to the correct database."
         )
     else:
-        context["rows"], context["page_obj"] = build_dashboard_rows(
-            section,
-            query,
-            sort_field,
-            sort_dir,
-            status_filter,
-            page_number=request.GET.get("page", 1),
-            page_size=DASHBOARD_PAGE_SIZE,
-        )
-    return render(request, "dashboard/records.html", context)
+        filter_form = DashboardFilterForm(section, request.GET)
+        context["filter_form"] = filter_form
+        params = request.GET.copy()
+        params.pop("page", None)
+        context["filter_query"] = params.urlencode()
+        if filter_form.is_valid():
+            context["rows"], context["page_obj"] = build_dashboard_rows(
+                section,
+                query,
+                sort_field,
+                sort_dir,
+                status_filter,
+                page_number=request.GET.get("page", 1),
+                page_size=DASHBOARD_PAGE_SIZE,
+                filters=filter_form.cleaned_data,
+            )
+        else:
+            context["filter_error"] = True
+    return render(
+        request,
+        "dashboard/records.html",
+        context,
+        status=400 if context.get("filter_error") else 200,
+    )
 
 
 @dashboard_permission_required("farmers.view_dashboard_audit_logs")

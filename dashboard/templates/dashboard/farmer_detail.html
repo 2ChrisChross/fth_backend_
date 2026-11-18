@@ -148,9 +148,14 @@
                             <option value="size_asc" {% if farm_sort == 'size_asc' %}selected{% endif %}>Smallest first</option>
                         </select>
                     </label>
+                    {% for field in filter_form %}
+                        <label>{{ field.label }} {{ field }} {{ field.errors }}</label>
+                    {% endfor %}
                     <button type="submit">Search</button>
+                    <a href="?view=farms">Clear</a>
                 </form>
 
+                {% if filter_error %}<div class="messages error" role="alert">Correct the filter errors above.</div>{% endif %}
                 {% if farms %}
                     <div class="farm-scroll" tabindex="0" aria-label="Scrollable list of farms">
                         <table>
@@ -201,10 +206,10 @@
                         <nav class="pagination" aria-label="Farm pagination">
                             <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
                             {% if page_obj.has_previous %}
-                                <a href="?view=farms&farm_search={{ farm_search|urlencode }}&farm_status={{ farm_status }}&farm_size={{ farm_size_filter }}&farm_sort={{ farm_sort }}&page={{ page_obj.previous_page_number }}">Previous</a>
+                                <a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
                             {% endif %}
                             {% if page_obj.has_next %}
-                                <a href="?view=farms&farm_search={{ farm_search|urlencode }}&farm_status={{ farm_status }}&farm_size={{ farm_size_filter }}&farm_sort={{ farm_sort }}&page={{ page_obj.next_page_number }}">Next</a>
+                                <a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>
                             {% endif %}
                         </nav>
                     {% endif %}

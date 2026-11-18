@@ -20,15 +20,16 @@ from shared.models import (
     ElectronicDocument,
 )
 
+from .filters import DashboardFilterForm, apply_farm_filters
 from .permissions import (
     dashboard_navigation,
     dashboard_permission_required,
     has_dashboard_permission,
 )
 from .services import (
+    calendar_status_labels,
     dashboard_url,
     database_ready_for_dashboard,
-    calendar_status_labels,
     farm_crops_with_stage,
     farmer_users,
 )
@@ -161,8 +162,12 @@ def farmer_detail(request, user_id):
     farm_size_filter = request.GET.get("farm_size", "all")
     farm_search = (request.GET.get("farm_search") or "").strip()
     farm_sort = request.GET.get("farm_sort", "newest")
+    filter_form = DashboardFilterForm("farms", request.GET)
+    filter_valid = active_view != "farms" or filter_form.is_valid()
+    filter_params = request.GET.copy()
+    filter_params.pop("page", None)
 
-    if active_view == "farms":
+    if active_view == "farms" and filter_valid:
         farm_queryset = (
             Farm.objects.filter(user=farmer)
             .select_related("address")
@@ -203,6 +208,7 @@ def farmer_detail(request, user_id):
                 | Q(address__postal_code__icontains=farm_search)
             )
 
+        farm_queryset = apply_farm_filters(farm_queryset, filter_form.cleaned_data)
         if farm_sort == "size_asc":
             farm_queryset = farm_queryset.order_by("farm_size_hectares", "farm_id")
         elif farm_sort == "size_desc":
@@ -251,6 +257,9 @@ def farmer_detail(request, user_id):
             "farm_size_filter": farm_size_filter,
             "farm_search": farm_search,
             "farm_sort": farm_sort,
+            "filter_form": filter_form,
+            "filter_error": not filter_valid,
+            "filter_query": filter_params.urlencode(),
             "personal_address": farmer.personal_address,
             "documents": documents,
             "can_view_applications": can_view_applications,
@@ -264,6 +273,7 @@ def farmer_detail(request, user_id):
                 request.user, "farmers.manually_verify_farmer"
             ),
         },
+        status=400 if not filter_valid else 200,
     )
 
 

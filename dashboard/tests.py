@@ -1,11 +1,14 @@
 ﻿import re
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.conf import settings
+from django.contrib.staticfiles.storage import staticfiles_storage
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.management import call_command
 from django.template.loader import get_template
-from django.test import RequestFactory, SimpleTestCase
+from django.test import Client, RequestFactory, SimpleTestCase, override_settings
 from django.urls import Resolver404, resolve, reverse
 
 from .farmer_views import (
@@ -26,6 +29,22 @@ from .services import (
 )
 from .views import dashboard_users, farmer_code_requests, farmer_delete
 from .workflows import DashboardWorkflowValidationError, update_dashboard_status
+
+
+class DashboardStaticFilesTests(SimpleTestCase):
+    def test_collected_dashboard_scripts_are_served_with_debug_disabled(self):
+        with TemporaryDirectory() as static_root, override_settings(
+            STATIC_ROOT=static_root, DEBUG=False, ALLOWED_HOSTS=["testserver"]
+        ):
+            call_command("collectstatic", interactive=False, verbosity=0)
+            client = Client()
+            for name in ("columns.js", "filters.js"):
+                url = staticfiles_storage.url(f"dashboard/{name}")
+                response = client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("javascript", response["Content-Type"])
+                self.assertTrue(b"".join(response.streaming_content))
+                self.assertIn("max-age=", response["Cache-Control"])
 
 
 class FarmerUsersScopeTests(SimpleTestCase):
@@ -90,7 +109,7 @@ class DashboardSidebarTests(SimpleTestCase):
 
         self.assertNotContains(response, "Add New")
 
-    def test_farmer_list_hides_phone_farm_size_and_location(self):
+    def test_farmer_optional_columns_are_hidden_by_default(self):
         rendered = get_template("dashboard/records.html").render(
             {
                 "section": "farmers",
@@ -112,13 +131,11 @@ class DashboardSidebarTests(SimpleTestCase):
             }
         )
 
-        self.assertIn("<th>Name</th>", rendered)
-        self.assertIn("<th>Created</th>", rendered)
-        self.assertIn("<th>Account</th>", rendered)
-        self.assertIn("<th>Actions</th>", rendered)
-        self.assertNotIn("<th>Phone</th>", rendered)
-        self.assertNotIn("<th>Farm Size</th>", rendered)
-        self.assertNotIn("<th>Location</th>", rendered)
+        for key in ("name", "created", "account", "actions"):
+            self.assertIn(f'<th data-column="{key}">', rendered)
+        for key in ("phone", "farm_size", "location"):
+            self.assertIn(f'<th data-column="{key}" hidden>', rendered)
+            self.assertIn(f'<td data-column="{key}" hidden>', rendered)
         self.assertNotIn("Farm size</option>", rendered)
 
     def test_text_filter_forms_keep_a_search_button(self):
@@ -144,6 +161,24 @@ class DashboardSidebarTests(SimpleTestCase):
             self.assertIn('type="submit">Search</button>', html)
             self.assertNotIn('type="submit">Filter</button>', html)
             self.assertNotIn('type="submit">Apply Filters</button>', html)
+
+    def test_column_customization_is_available_for_empty_record_lists(self):
+        for section in ("farmers", "logistics", "businesses"):
+            with self.subTest(section=section):
+                rendered = get_template("dashboard/records.html").render(
+                    {
+                        "section": section,
+                        "section_title": section.title(),
+                        "sections": [],
+                        "rows": [],
+                        "status_filter": "all",
+                        "sort_field": "last_name",
+                        "sort_dir": "asc",
+                    }
+                )
+                self.assertIn(f'data-column-table="{section}"', rendered)
+                self.assertIn("data-column-menu-button", rendered)
+                self.assertIn("No " + section + " match your search.", rendered)
 
     @patch("dashboard.services.connection.introspection.table_names")
     def test_dashboard_database_readiness_uses_current_model_table_names(
