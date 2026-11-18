@@ -12,6 +12,16 @@ from .audit import log_staff_audit_change
 from .models import User
 
 
+class HealthEndpointTests(SimpleTestCase):
+    def test_root_responds_to_get_and_head(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(response.content, {"message": "FTH API is running."})
+        response = self.client.head("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"")
+
+
 class SchemaRegressionTests(SimpleTestCase):
     def test_domain_models_are_registered_in_django_admin(self):
         app_labels = {"api", "farmers", "businesses", "logistics"}

@@ -1,5 +1,5 @@
-from rest_framework.response import Response
+from django.http import JsonResponse
 
 
 def index(request):
-    return Response({"message": "FTH API is running."})
+    return JsonResponse({"message": "FTH API is running."})
