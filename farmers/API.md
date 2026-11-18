@@ -233,13 +233,16 @@ access token. Each endpoint limits results and changes to that farmer's records.
   `available_stock_kg`, `price_per_kg`, and `is_active`. Stock is the remaining
   **unreserved** quantity; changing it does not alter existing reservations.
   Deactivate a listing to remove it from the buyer marketplace.
-- `GET crops/<crop_id>/expenses/` lists operating expenses for an active crop
-  on the farmer's active farm. `POST` to the same path adds an expense, for
+- `GET listings/<listing_id>/expenses/` lists operating expenses for a listing
+  of an active crop on the farmer's active farm. `POST` to the same path adds an expense, for
   example `{"tag": "Fertilizer", "amount": "500.00"}`. Tags are free text,
   amounts are non-negative totals (not per kilogram), and multiple entries,
   including repeated tags, are allowed. Use the same currency as the listing
-  price. Expenses belong to the crop and are shared across its listings; they
-  do not automatically change prices. Editing and deletion are not yet exposed.
+  price. Expenses belong to the listing, not other listings of the same crop;
+  they do not automatically change prices. Editing and deletion are not yet
+  exposed. The former crop-expense API is no longer available. The legacy crop
+  expense table is retained; migration `farmers.0009` stops if it contains
+  records, so they can be reviewed rather than silently reassigned.
 - `GET orders/` lists orders created through the buyer reservation workflow
   for the farmer's crops, including `reservation_status` and `delivery_status`.
   The latter is `not_assigned`, `awaiting_trip`, `planned`, `in_transit`,

@@ -3,7 +3,6 @@ from django.urls import path
 from shared.farmer_messages import FarmerInboxView
 
 from .marketplace import (
-    CropExpensesView,
     CropsView,
     CropTypesView,
     FarmDetailView,
@@ -11,6 +10,7 @@ from .marketplace import (
     FarmerListingsView,
     FarmerOrdersView,
     FarmsView,
+    ListingExpensesView,
 )
 from .views import (
     FarmerTokenRefreshView,
@@ -46,12 +46,12 @@ urlpatterns = [
     path("farms/<int:farm_id>/", FarmDetailView.as_view(), name="farm_detail"),
     path("crop-types/", CropTypesView.as_view(), name="crop_types"),
     path("crops/", CropsView.as_view(), name="crops"),
-    path(
-        "crops/<int:crop_id>/expenses/",
-        CropExpensesView.as_view(),
-        name="crop_expenses",
-    ),
     path("listings/", FarmerListingsView.as_view(), name="listings"),
+    path(
+        "listings/<int:listing_id>/expenses/",
+        ListingExpensesView.as_view(),
+        name="listing_expenses",
+    ),
     path(
         "listings/<int:listing_id>/",
         FarmerListingDetailView.as_view(),

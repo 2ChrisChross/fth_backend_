@@ -195,7 +195,8 @@ class SimulatorAccessTests(SimpleTestCase):
         self.assertIn('id="refresh-listings"', html)
         self.assertIn('data-action="add"', html)
         self.assertIn('data-action="update"', html)
-        self.assertIn('id="crop-expense-form"', html)
+        self.assertIn('id="listing-expense-form"', html)
+        self.assertIn("Loading simulator. If this message remains", html)
         self.assertNotIn("Listing ID (update only)", html)
         self.assertNotIn("Existing crop ID (new listing)", html)
 

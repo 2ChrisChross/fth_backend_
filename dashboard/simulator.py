@@ -18,7 +18,6 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from businesses.views import register as register_buyer
 from farmers.marketplace import (
-    CropExpensesView,
     CropsView,
     CropTypesView,
     FarmDetailView,
@@ -26,6 +25,7 @@ from farmers.marketplace import (
     FarmerListingsView,
     FarmerOrdersView,
     FarmsView,
+    ListingExpensesView,
 )
 from farmers.views import farmer_profile
 from farmers.views import register_user as register_farmer
@@ -279,10 +279,10 @@ def simulator_farmer_api(request, farmer_id, action):
     view = views.get(action)
     kwargs = {}
     if view is None:
-        expense_match = re.fullmatch(r"crops/([1-9][0-9]*)/expenses/", action)
+        expense_match = re.fullmatch(r"listings/([1-9][0-9]*)/expenses/", action)
         if expense_match:
-            view = CropExpensesView
-            kwargs["crop_id"] = int(expense_match.group(1))
+            view = ListingExpensesView
+            kwargs["listing_id"] = int(expense_match.group(1))
     if view is None:
         match = re.fullmatch(r"(farms|listings)/([1-9][0-9]*)/", action)
         if not match:

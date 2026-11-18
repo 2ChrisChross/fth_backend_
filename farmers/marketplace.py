@@ -17,9 +17,9 @@ from .authentication import FarmerJWTAuthentication
 from .models import (
     Crop,
     CropCalendar,
-    CropOperatingExpense,
     CropType,
     Farm,
+    ListingOperatingExpense,
     MarketplaceListing,
 )
 
@@ -152,13 +152,13 @@ class CropListingUpdate(serializers.Serializer):
     is_active = serializers.BooleanField(required=False)
 
 
-class CropOperatingExpenseSerializer(serializers.ModelSerializer):
+class ListingOperatingExpenseSerializer(serializers.ModelSerializer):
     amount = serializers.DecimalField(
         max_digits=12, decimal_places=2, min_value=Decimal("0")
     )
 
     class Meta:
-        model = CropOperatingExpense
+        model = ListingOperatingExpense
         fields = ("expense_id", "tag", "amount")
         read_only_fields = ("expense_id",)
 
@@ -271,26 +271,22 @@ class CropsView(FarmerView):
         )
 
 
-class CropExpensesView(FarmerView):
-    def get_crop(self, request, crop_id):
+class ListingExpensesView(FarmerView):
+    def get_listing(self, request, listing_id):
         return get_object_or_404(
-            Crop,
-            pk=crop_id,
-            farm__user=request.user,
-            farm__deleted_at__isnull=True,
-            deleted_at__isnull=True,
+            owned_listings(request.user), pk=listing_id
         )
 
-    def get(self, request, crop_id):
-        crop = self.get_crop(request, crop_id)
-        expenses = crop.operating_expenses.order_by("expense_id")
-        return Response(CropOperatingExpenseSerializer(expenses, many=True).data)
+    def get(self, request, listing_id):
+        listing = self.get_listing(request, listing_id)
+        expenses = listing.operating_expenses.order_by("expense_id")
+        return Response(ListingOperatingExpenseSerializer(expenses, many=True).data)
 
-    def post(self, request, crop_id):
-        crop = self.get_crop(request, crop_id)
-        serializer = CropOperatingExpenseSerializer(data=request.data)
+    def post(self, request, listing_id):
+        listing = self.get_listing(request, listing_id)
+        serializer = ListingOperatingExpenseSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(crop=crop)
+        serializer.save(listing=listing)
         return Response(serializer.data, status=201)
 
 

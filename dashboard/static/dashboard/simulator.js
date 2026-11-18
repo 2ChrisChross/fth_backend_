@@ -83,7 +83,6 @@
                             form.reset();
                             if (item.price_per_kg !== null) form.elements.price_per_kg.value = item.price_per_kg;
                             fill("farmer-listing-form", "crop_id", item.crop_id);
-                            fill("crop-expense-form", "crop_id", item.crop_id);
                             updateListingStockInput();
                         });
                     }
@@ -93,7 +92,7 @@
                             form.reset();
                             updateListingStockInput();
                             fill("farmer-listing-form", "listing_id", item.listing_id);
-                            fill("crop-expense-form", "crop_id", item.crop_id);
+                            fill("listing-expense-form", "listing_id", item.listing_id);
                         });
                     } else if (section === "businesses" && item.listing_id) {
                         addSelectButton(card, "Use listing", () => fill("order-form", "listing_id", item.listing_id));
@@ -615,9 +614,9 @@
         }
     });
 
-    handle("crop-expense-form", async (form, values) => {
-        const {crop_id, ...payload} = values;
-        show(await api(`crops/${crop_id}/expenses/`, "POST", payload));
+    handle("listing-expense-form", async (form, values) => {
+        const {listing_id, ...payload} = values;
+        show(await api(`listings/${listing_id}/expenses/`, "POST", payload));
         form.elements.tag.value = "";
         form.elements.amount.value = "";
         const formStatus = form.querySelector("[data-form-status]");
@@ -626,11 +625,11 @@
         setStatus("Expense added.");
     });
 
-    handleButton("view-crop-expenses", async () => {
-        const cropId = document.getElementById("crop-expense-form").elements.crop_id.value;
-        if (!/^[1-9]\d*$/.test(cropId)) throw new Error("Enter a valid crop ID.");
-        show(await api(`crops/${cropId}/expenses/`));
-        setStatus("Crop expenses loaded. See results below.");
+    handleButton("view-listing-expenses", async () => {
+        const listingId = document.getElementById("listing-expense-form").elements.listing_id.value;
+        if (!/^[1-9]\d*$/.test(listingId)) throw new Error("Enter a valid listing ID.");
+        show(await api(`listings/${listingId}/expenses/`));
+        setStatus("Listing expenses loaded. See results below.");
     });
 
     handle("farmer-listing-form", async (form, values) => {
@@ -638,20 +637,33 @@
         const id = payload.listing_id;
         delete payload.listing_id;
         if (id && (payload.farm_id || payload.crop_type_id || payload.crop_id)) {
-            throw new Error("Crop, farm and crop type can only be supplied for a new listing.");
+            throw new Error("Listing ID is for updates. To create a listing, clear Listing ID; it is assigned automatically.");
         }
         if (payload.is_active !== undefined) payload.is_active = payload.is_active === "true";
         if (!Object.keys(payload).length) throw new Error("Enter at least one listing field.");
-        show(await api(id ? `listings/${id}/` : "listings/", id ? "PATCH" : "POST", payload));
-        setStatus(id ? "Listing updated." : "Listing created.");
+        const result = await api(id ? `listings/${id}/` : "listings/", id ? "PATCH" : "POST", payload);
+        show(result);
+        const message = `${id ? "Listing updated" : "Listing created"}: listing ID ${result.listing_id}, crop ID ${result.crop_id}.`;
+        setStatus(message);
+        const formStatus = form.querySelector("[data-form-status]");
+        formStatus.textContent = message;
+        formStatus.classList.remove("error");
+        document.getElementById("listing-expense-form").elements.listing_id.value = result.listing_id;
         const refreshes = [loadFarmerCollection("listings")];
         if (!document.getElementById("farmer-crops").hidden) {
             refreshes.push(loadFarmerCollection("crops"));
         }
         if ((await Promise.all(refreshes)).includes(false)) {
             setStatus("Listing saved, but some lists could not be refreshed.", true);
+            formStatus.textContent = `${message} Some lists could not be refreshed.`;
+            formStatus.classList.add("error");
         }
     });
+    if (selectedFarmer) {
+        const form = document.getElementById("farmer-listing-form");
+        form.querySelector("[data-form-status]").textContent = "";
+        form.querySelector("button[type=submit]").disabled = false;
+    }
 
     handle("farmer-message-form", async (form, values) => {
         show(await api("farmer-messages/", "POST", values));

@@ -157,6 +157,26 @@ class MarketplaceListing(models.Model):
         db_table = "MARKETPLACE_LISTINGS"
 
 
+class ListingOperatingExpense(models.Model):
+    expense_id = models.AutoField(primary_key=True)
+    listing = models.ForeignKey(
+        MarketplaceListing, on_delete=models.CASCADE, related_name="operating_expenses"
+    )
+    tag = models.CharField(max_length=255)
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0"))]
+    )
+
+    class Meta:
+        db_table = "LISTING_OPERATING_EXPENSES"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gte=0),
+                name="listing_expense_amount_nonnegative",
+            )
+        ]
+
+
 class FarmerCodeRequest(models.Model):
     class Purpose(models.TextChoices):
         VERIFICATION = "verification", "Account verification"

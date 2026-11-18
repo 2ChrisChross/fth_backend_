@@ -362,7 +362,7 @@
             <div id="farmer-listings" role="status" aria-live="polite">Loading listings...</div>
             <form id="farmer-listing-form">
                 <h2>Add or update a listing</h2>
-                <p class="help">To add a listing, choose an existing crop or a farm and crop type for a new crop. An existing crop keeps its current stock; update it separately after listing. For updates, provide the listing ID and only fields to change. Stock means currently available, unreserved kilograms; listings for the same crop share it. Deactivate rather than delete a listing.</p>
+                <p class="help">To create a new crop and listing, leave Listing ID and Existing crop ID blank, and enter a farm ID and crop type ID. Listing and crop IDs are assigned automatically. To list an existing crop, enter its crop ID instead; its stock stays unchanged. To update a listing, enter its listing ID and only the fields to change. Stock is unreserved kilograms shared by listings for the same crop. Deactivate rather than delete a listing.</p>
                 <div class="grid">
                     <label>Listing ID <input name="listing_id" type="number" min="1"></label>
                     <label>Existing crop ID <input name="crop_id" type="number" min="1"></label>
@@ -374,18 +374,19 @@
                     <label>Price per kg <input name="price_per_kg" type="number" min="0" step="0.01"></label>
                     <label>Active <select name="is_active"><option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option></select></label>
                 </div>
-                <div class="actions"><button type="submit">Save listing</button></div>
+                <p class="help" data-form-status role="status" aria-live="polite">Loading simulator. If this message remains, reload the page.</p>
+                <div class="actions"><button type="submit" disabled>Save listing</button></div>
             </form>
-            <form id="crop-expense-form">
-                <h2>Crop operating expenses</h2>
-                <p class="help">Expenses are total amounts for the crop and are shared across its listings. Use the same currency as the listing price.</p>
+            <form id="listing-expense-form">
+                <h2>Listing operating expenses</h2>
+                <p class="help">Expenses are total amounts for this listing. Use the same currency as the listing price.</p>
                 <div class="grid">
-                    <label>Crop ID <input name="crop_id" type="number" min="1" required></label>
+                    <label>Listing ID <input name="listing_id" type="number" min="1" required></label>
                     <label>Tag <input name="tag" maxlength="255" required></label>
                     <label>Amount <input name="amount" type="number" min="0" step="0.01" required></label>
                 </div>
                 <p class="help" data-form-status role="status" aria-live="polite"></p>
-                <div class="actions"><button type="submit">Add expense</button><button type="button" id="view-crop-expenses">View expenses</button></div>
+                <div class="actions"><button type="submit">Add expense</button><button type="button" id="view-listing-expenses">View expenses</button></div>
             </form>
         </details>
         <details>

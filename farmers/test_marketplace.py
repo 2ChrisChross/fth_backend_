@@ -9,7 +9,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from farmers.models import Crop, CropCalendar, CropOperatingExpense, CropType, Farm
+from farmers.models import Crop, CropCalendar, CropType, Farm, ListingOperatingExpense
 from logistics.models import LogisticsCompany, Vehicle
 from shared.models import Address, User
 from shared.registration import resolve_enum_order_id
@@ -238,10 +238,22 @@ class FarmerMarketplaceTests(TestCase):
             404,
         )
 
-    def test_crop_expenses_are_crop_owned_validated_and_shared(self):
+    def test_listing_expenses_are_owned_validated_and_separate(self):
         farmer = self.login("farmers", self.farmer)
         other = self.login("farmers", self.other)
-        url = f"/api/farmers/crops/{self.old_crop.pk}/expenses/"
+        payload = {
+            "crop_id": self.old_crop.pk,
+            "title": "First",
+            "price_per_kg": "4",
+            "is_active": True,
+        }
+        first = farmer.post("/api/farmers/listings/", payload, format="json")
+        second = farmer.post("/api/farmers/listings/", payload, format="json")
+        self.assertEqual(first.status_code, 201, first.data)
+        self.assertEqual(second.status_code, 201, second.data)
+        self.assertEqual(first.data["crop_id"], second.data["crop_id"])
+        url = f"/api/farmers/listings/{first.data['listing_id']}/expenses/"
+        second_url = f"/api/farmers/listings/{second.data['listing_id']}/expenses/"
         for data in (
             {"tag": "", "amount": "5"},
             {"tag": "Seed", "amount": "-1"},
@@ -261,19 +273,14 @@ class FarmerMarketplaceTests(TestCase):
             [(entry["tag"], entry["amount"]) for entry in farmer.get(url).data],
             [("Seed", "10.00"), ("Fuel", "20.50"), ("Seed", "2.00")],
         )
-        payload = {
-            "crop_id": self.old_crop.pk,
-            "title": "First",
-            "price_per_kg": "4",
-            "is_active": True,
-        }
-        first = farmer.post("/api/farmers/listings/", payload, format="json")
-        second = farmer.post("/api/farmers/listings/", payload, format="json")
-        self.assertEqual(first.status_code, 201, first.data)
-        self.assertEqual(second.status_code, 201, second.data)
-        self.assertEqual(first.data["crop_id"], second.data["crop_id"])
+        self.assertEqual(farmer.get(second_url).data, [])
         self.assertEqual(
-            CropOperatingExpense.objects.filter(crop=self.old_crop).count(), 3
+            ListingOperatingExpense.objects.filter(listing_id=first.data["listing_id"]).count(),
+            3,
+        )
+        self.assertEqual(
+            farmer.get(f"/api/farmers/crops/{self.old_crop.pk}/expenses/").status_code,
+            404,
         )
         self.old_crop.deleted_at = timezone.now()
         self.old_crop.save(update_fields=["deleted_at"])
@@ -535,7 +542,7 @@ class FarmerMarketplaceTests(TestCase):
         )
         self.assertEqual(response.status_code, 201, response.content)
         listing_id = response.json()["listing_id"]
-        expense_url = base + f"crops/{response.json()['crop_id']}/expenses/"
+        expense_url = base + f"listings/{listing_id}/expenses/"
         expense = self.client.post(
             expense_url,
             {"tag": "Fuel", "amount": "5.00"},
@@ -544,7 +551,7 @@ class FarmerMarketplaceTests(TestCase):
         self.assertEqual(expense.status_code, 201, expense.content)
         self.assertEqual(self.client.get(expense_url).json()[0]["tag"], "Fuel")
         self.assertEqual(
-            self.client.get(pending + f"crops/{self.old_crop.pk}/expenses/").status_code,
+            self.client.get(pending + f"listings/{listing_id}/expenses/").status_code,
             404,
         )
         duplicate = self.client.post(
@@ -592,7 +599,7 @@ class FarmerMarketplaceTests(TestCase):
         url = f"/dashboard/local-test/farmers/{self.farmer.pk}/api/me/"
         expense_url = (
             f"/dashboard/local-test/farmers/{self.farmer.pk}/api/"
-            f"crops/{self.old_crop.pk}/expenses/"
+            "listings/1/expenses/"
         )
         self.assertEqual(
             client.post(
