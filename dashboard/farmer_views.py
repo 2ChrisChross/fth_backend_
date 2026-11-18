@@ -162,12 +162,14 @@ def farmer_detail(request, user_id):
     farm_size_filter = request.GET.get("farm_size", "all")
     farm_search = (request.GET.get("farm_search") or "").strip()
     farm_sort = request.GET.get("farm_sort", "newest")
-    filter_form = DashboardFilterForm("farms", request.GET)
-    filter_valid = active_view != "farms" or filter_form.is_valid()
+    filter_form = (
+        DashboardFilterForm("farms", request.GET) if active_view == "farms" else None
+    )
+    filter_valid = filter_form is None or filter_form.is_valid()
     filter_params = request.GET.copy()
     filter_params.pop("page", None)
 
-    if active_view == "farms" and filter_valid:
+    if filter_form is not None and filter_valid:
         farm_queryset = (
             Farm.objects.filter(user=farmer)
             .select_related("address")

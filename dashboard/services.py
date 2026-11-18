@@ -490,7 +490,7 @@ def build_dashboard_rows(
         ):
             if filters.get(name):
                 bulk_buyers = bulk_buyers.filter(
-                    **{f"{field}__icontains": filters[name]}
+                    **{f"{field}__iexact": filters[name]}
                 )
         bulk_buyers = apply_date_filter(bulk_buyers, "dashboard_created_at", filters)
         bulk_buyers, page_obj = _paginate_queryset(

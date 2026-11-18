@@ -210,6 +210,9 @@
                         {% endfor %}
                         {{ filter_form.non_field_errors }}
                         <button class="btn btn-secondary" type="submit">Search</button>
+                        {% if section == "farmers" or section == "businesses" %}
+                            <noscript>After changing a province or city, clear dependent selections and press Search to refresh the choices.</noscript>
+                        {% endif %}
                         <a class="btn btn-secondary" href="{{ dashboard_url }}">Clear</a>
                     </form>
                 </div>

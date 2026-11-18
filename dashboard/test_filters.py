@@ -12,7 +12,16 @@ from django.utils import timezone
 from businesses.models import BulkBuyer
 from farmers.models import Crop, CropType, Farm, FarmerCodeRequest
 from logistics.models import Vehicle
-from shared.models import AccountCodeRequest, Address, AuditLog, PhoneNumber, User
+from shared.models import (
+    AccountCodeRequest,
+    Address,
+    AuditLog,
+    Barangay,
+    Municipality,
+    PhoneNumber,
+    Province,
+    User,
+)
 
 
 class DashboardFilterTests(TestCase):
@@ -50,9 +59,9 @@ class DashboardFilterTests(TestCase):
         Crop.objects.create(farm=another, crop_type=self.rice)
         url = reverse("farmers:dashboard")
         params = {
-            "province": "pampanga",
-            "municipality": "arayat",
-            "crop": "rice",
+            "province": "Pampanga",
+            "municipality": "Arayat",
+            "crop": str(self.rice.pk),
             "farm_size": "1_to_10",
             "status_filter": "verified",
             "date_from": "2024-05-10",
@@ -62,7 +71,7 @@ class DashboardFilterTests(TestCase):
         self.assertEqual(
             [row["id"] for row in response.context["rows"]], [self.farmer.pk]
         )
-        self.assertContains(response, 'name="province" value="pampanga"')
+        self.assertContains(response, '<option value="Pampanga" selected>')
         params["farm_size"] = "10_plus"
         self.assertEqual(self.client.get(url, params).context["rows"], [])
         self.farm.deleted_at = timezone.now()
@@ -82,17 +91,116 @@ class DashboardFilterTests(TestCase):
             url,
             {
                 "view": "farms",
-                "province": "pampanga",
-                "crop": "rice",
+                "province": "Pampanga",
+                "crop": str(self.rice.pk),
                 "farm_size": "1_to_10",
             },
         )
         self.assertEqual(
             [farm.pk for farm in response.context["farms"]], [self.farm.pk]
         )
-        response = self.client.get(url, {"view": "farms", "crop": "corn"})
+        response = self.client.get(
+            url, {"view": "farms", "crop": str(archived_crop.crop_type_id)}
+        )
         self.assertEqual(response.context["farms"], [])
         self.assertIsNotNone(archived_crop.deleted_at)
+
+    def test_locality_seed_and_dependent_choices_include_legacy_addresses(self):
+        self.assertEqual(Province.objects.count(), 7)
+        self.assertEqual(Municipality.objects.count(), 130)
+        self.assertEqual(Barangay.objects.count(), 3105)
+        Address.objects.create(
+            province="Legacy Province",
+            municipality_city="Old Town",
+            barangay="Old Ward",
+        )
+        url = reverse("businesses:dashboard")
+        response = self.client.get(
+            url, {"province": "Legacy Province", "municipality": "Old Town"}
+        )
+        self.assertEqual(response.status_code, 200)
+        fields = response.context["filter_form"].fields
+        self.assertIn(
+            ("Legacy Province", "Legacy Province"), fields["province"].choices
+        )
+        self.assertIn(("Old Town", "Old Town"), fields["municipality"].choices)
+        self.assertIn(("Old Ward", "Old Ward"), fields["barangay"].choices)
+        self.assertNotIn(("Arayat", "Arayat"), fields["municipality"].choices)
+
+        response = self.client.get(url, {"province": "Pampanga"})
+        self.assertContains(response, "City of Angeles (independent city)")
+        self.assertNotIn(
+            ("Old Town", "Old Town"),
+            response.context["filter_form"].fields["municipality"].choices,
+        )
+        self.assertEqual(
+            self.client.get(
+                url, {"province": "Pampanga", "municipality": "Old Town"}
+            ).status_code,
+            400,
+        )
+
+    def test_location_choices_match_exact_values_and_legacy_combinations(self):
+        address = Address.objects.create(
+            province="legacy province",
+            municipality_city="Old Town",
+            barangay="old ward",
+        )
+        Address.objects.create(
+            province="Legacy Province",
+            municipality_city="Old Town",
+            barangay="Old Ward",
+        )
+        buyer = BulkBuyer.objects.create(business_name="Legacy", address=address)
+        BulkBuyer.objects.create(
+            business_name="Similar",
+            address=Address.objects.create(
+                province="Legacy Province",
+                municipality_city="Old Town",
+                barangay="Old Ward Extension",
+            ),
+        )
+        response = self.client.get(
+            reverse("businesses:dashboard"),
+            {
+                "province": "Legacy Province",
+                "municipality": "Old Town",
+                "barangay": "Old Ward",
+            },
+        )
+        self.assertEqual([row["id"] for row in response.context["rows"]], [buyer.pk])
+        self.assertEqual(
+            self.client.get(
+                reverse("businesses:dashboard"),
+                {
+                    "province": "Legacy Province",
+                    "municipality": "Old Town",
+                    "barangay": "Not a barangay",
+                },
+            ).status_code,
+            400,
+        )
+
+    def test_crop_choices_use_database_ids_and_keep_duplicate_names_separate(self):
+        other_rice = CropType.objects.create(crop_name="Rice")
+        url = reverse("farmers:dashboard")
+        response = self.client.get(url)
+        choices = response.context["filter_form"].fields["crop"].choices
+        self.assertIn((str(self.rice.pk), f"Rice (#{self.rice.pk})"), choices)
+        self.assertIn((str(other_rice.pk), f"Rice (#{other_rice.pk})"), choices)
+        self.assertEqual(
+            self.client.get(url, {"crop": str(other_rice.pk)}).context["rows"], []
+        )
+        self.assertEqual(
+            [
+                row["id"]
+                for row in self.client.get(url, {"crop": str(self.rice.pk)}).context[
+                    "rows"
+                ]
+            ],
+            [self.farmer.pk],
+        )
+        self.assertEqual(self.client.get(url, {"crop": "not-a-crop"}).status_code, 400)
 
     def test_farm_pagination_preserves_location_and_crop(self):
         Farm.objects.bulk_create(

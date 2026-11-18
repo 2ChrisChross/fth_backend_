@@ -69,8 +69,10 @@ status. Clear resets the page's filters.
   active crop type. Archived crops do not match crop filters.
 - Bulk buyers can be filtered by business address; logistics vehicles by body
   type, refrigeration and weight capacity. Audit logs can be filtered by action
-  and target table. Location, crop, action and target searches are partial and
-  case-insensitive.
+  and target table. Address dropdowns include Region III reference locations
+  and existing address values, and match case-insensitively and exactly.
+  Crop choices come from the database and match a specific crop-type ID.
+  Audit action and target searches are partial and case-insensitive.
 - Date bounds are inclusive and use the dashboard's configured time zone.
   Farmer and vehicle creation dates come from their earliest creation audit
   event; bulk buyers use their creation timestamp or, if absent, that audit

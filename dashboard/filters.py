@@ -1,24 +1,78 @@
 from django import forms
 
-from farmers.models import FarmerCodeRequest
+from farmers.models import CropType, FarmerCodeRequest
 from shared.enums import enum_rows
+from shared.models import Address, Barangay, Municipality, Province
+
+
+def location_choices(data):
+    province = data.get("province", "") if data is not None else ""
+    municipality = data.get("municipality", "") if data is not None else ""
+    municipalities = Municipality.objects.all()
+    barangays = Barangay.objects.all()
+    addresses = Address.objects.all()
+    if province:
+        municipalities = municipalities.filter(province__name__iexact=province)
+        barangays = barangays.filter(municipality__province__name__iexact=province)
+        addresses = addresses.filter(province__iexact=province)
+    if municipality:
+        barangays = barangays.filter(municipality__name__iexact=municipality)
+
+    def choices(reference_names, stored_names, empty_label):
+        labels = {name: label for name, label in reference_names if name}
+        for name in stored_names:
+            if name:
+                labels.setdefault(name, name)
+        return [("", empty_label)] + sorted(
+            labels.items(), key=lambda item: item[1].casefold()
+        )
+
+    province_choices = choices(
+        ((name, name) for name in Province.objects.values_list("name", flat=True)),
+        Address.objects.values_list("province", flat=True).distinct(),
+        "Any province",
+    )
+    municipality_choices = choices(
+        (
+            (name, f"{name} (independent city)" if independent else name)
+            for name, independent in municipalities.values_list("name", "independent")
+        ),
+        addresses.values_list("municipality_city", flat=True).distinct(),
+        "Any city / municipality",
+    )
+    if municipality:
+        addresses = addresses.filter(municipality_city__iexact=municipality)
+    barangay_choices = choices(
+        ((name, name) for name in barangays.values_list("name", flat=True)),
+        addresses.values_list("barangay", flat=True).distinct(),
+        "Any barangay",
+    )
+    return province_choices, municipality_choices, barangay_choices
 
 
 class DashboardFilterForm(forms.Form):
     def __init__(self, section, data=None, *args, **kwargs):
         super().__init__(data, *args, **kwargs)
         if section in {"farmers", "businesses", "farms"}:
-            for name, label in (
-                ("province", "Province"),
-                ("municipality", "City / municipality"),
-                ("barangay", "Barangay"),
+            for name, label, options in zip(
+                ("province", "municipality", "barangay"),
+                ("Province", "City / municipality", "Barangay"),
+                location_choices(data),
             ):
-                self.fields[name] = forms.CharField(
-                    label=label, required=False, max_length=255
+                self.fields[name] = forms.ChoiceField(
+                    label=label, required=False, choices=options
                 )
         if section in {"farmers", "farms"}:
-            self.fields["crop"] = forms.CharField(
-                label="Active crop type", required=False, max_length=255
+            self.fields["crop"] = forms.ChoiceField(
+                label="Active crop type",
+                required=False,
+                choices=[("", "Any crop type")]
+                + [
+                    (str(pk), f"{name or 'Unnamed crop type'} (#{pk})")
+                    for pk, name in CropType.objects.order_by(
+                        "crop_name", "pk"
+                    ).values_list("pk", "crop_name")
+                ],
             )
         if section == "farmers":
             self.fields["farm_size"] = forms.ChoiceField(
@@ -109,11 +163,11 @@ def apply_farm_filters(queryset, filters):
         ("barangay", "address__barangay"),
     ):
         if filters.get(name):
-            queryset = queryset.filter(**{f"{field}__icontains": filters[name]})
+            queryset = queryset.filter(**{f"{field}__iexact": filters[name]})
     if filters.get("crop"):
         queryset = queryset.filter(
             crops__deleted_at__isnull=True,
-            crops__crop_type__crop_name__icontains=filters["crop"],
+            crops__crop_type_id=filters["crop"],
         ).distinct()
     sizes = {
         "under_1": {"farm_size_hectares__lt": 1},

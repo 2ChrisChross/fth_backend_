@@ -2,6 +2,37 @@ from django.conf import settings
 from django.db import models
 
 
+class Province(models.Model):
+    code = models.CharField(max_length=10, primary_key=True)
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = "PROVINCES"
+
+
+class Municipality(models.Model):
+    code = models.CharField(max_length=10, primary_key=True)
+    name = models.CharField(max_length=255)
+    province = models.ForeignKey(
+        Province, on_delete=models.PROTECT, related_name="municipalities"
+    )
+    independent = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "MUNICIPALITIES"
+
+
+class Barangay(models.Model):
+    code = models.CharField(max_length=10, primary_key=True)
+    name = models.CharField(max_length=255)
+    municipality = models.ForeignKey(
+        Municipality, on_delete=models.PROTECT, related_name="barangays"
+    )
+
+    class Meta:
+        db_table = "BARANGAYS"
+
+
 class Address(models.Model):
     address_id = models.AutoField(primary_key=True)
     street_address = models.CharField(max_length=255, null=True, blank=True)
